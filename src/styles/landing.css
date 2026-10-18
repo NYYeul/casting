@@ -1,1 +1,362 @@
-/* landing */
+/* ── Landing: page shell ────────────────────────── */
+.landing-page {
+  /* aligns full-bleed bars (nav/footer) with the 1100px content column */
+  --lp-gutter: max(24px, calc((100% - 1100px) / 2 + 24px));
+  min-height: 100dvh;
+  background:
+    radial-gradient(1000px 520px at 88% -8%, #ece4ff 0%, transparent 62%),
+    radial-gradient(720px 420px at -8% 24%, #f5f0ff 0%, transparent 60%),
+    #fff;
+  overflow-x: clip;
+}
+
+/* ── Landing: nav ───────────────────────────────── */
+.lp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px var(--lp-gutter);
+  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.lp-links {
+  display: none;
+  gap: 28px;
+}
+.lp-links a {
+  color: #4a4558;
+  font-size: 14px;
+  font-weight: 600;
+}
+.lp-links a:hover {
+  color: var(--primary);
+}
+.lp-auth {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ── Landing: hero copy ─────────────────────────── */
+.lp-hero {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 24px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  scroll-margin-top: 72px;
+}
+.lp-copy {
+  min-width: 0;
+}
+.lp-copy h1 {
+  margin: 0 0 14px;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -1.2px;
+  line-height: 1.25;
+}
+.lp-copy h1 em {
+  font-style: normal;
+  color: var(--primary);
+}
+.lp-copy > p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #6f6a80;
+}
+.lp-values {
+  display: grid;
+  gap: 16px;
+  margin-top: 28px;
+}
+.lp-values > div {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 3px 12px;
+  align-items: center;
+}
+.lp-values span {
+  grid-row: span 2;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--lavender);
+  color: var(--primary);
+  font-size: 17px;
+  display: grid;
+  place-items: center;
+}
+.lp-values strong {
+  font-size: 13px;
+  font-weight: 800;
+}
+.lp-values small {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.lp-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 28px;
+}
+.lp-cta .button {
+  padding: 15px 24px;
+}
+
+/* ── Landing: collage ───────────────────────────── */
+.lp-collage {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  height: 300px;
+  margin: 0 auto;
+}
+.lp-collage img {
+  position: absolute;
+  object-fit: cover;
+  border: 3px solid #fff;
+  border-radius: 20px;
+  box-shadow: 0 16px 36px #3b1fa326;
+}
+.lp-collage .c0 {
+  left: 26%;
+  top: 14%;
+  width: 46%;
+  height: 64%;
+  z-index: 3;
+}
+.lp-collage .c1 {
+  left: 4%;
+  top: 2%;
+  width: 27%;
+  height: 34%;
+  z-index: 1;
+  transform: rotate(-3deg);
+}
+.lp-collage .c2 {
+  right: 4%;
+  top: 0;
+  width: 27%;
+  height: 34%;
+  z-index: 1;
+  transform: rotate(2.5deg);
+}
+.lp-collage .c3 {
+  left: 6%;
+  bottom: 8%;
+  width: 26%;
+  height: 32%;
+  z-index: 2;
+  transform: rotate(2deg);
+}
+.lp-collage .c4 {
+  right: 4%;
+  bottom: 6%;
+  width: 26%;
+  height: 32%;
+  z-index: 2;
+  transform: rotate(-2deg);
+}
+.lp-bubble {
+  position: absolute;
+  z-index: 5;
+  left: 13%;
+  bottom: 2%;
+  padding: 14px 18px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  border-radius: 18px 18px 18px 6px;
+  box-shadow: 0 14px 30px #3b1fa32e;
+}
+
+/* ── Landing: sections & cards ──────────────────── */
+.lp-section {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 56px 24px;
+  scroll-margin-top: 72px;
+}
+.lp-section h2 {
+  margin: 0 0 24px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  text-align: center;
+}
+.lp-grid {
+  display: grid;
+  gap: 16px;
+}
+.lp-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: 0 8px 24px #5a3ee60d;
+}
+.lp-card strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  margin-bottom: 7px;
+}
+.lp-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #6f6a80;
+}
+.lp-card .badge-soft {
+  display: inline-block;
+  margin-bottom: 12px;
+}
+.lp-card .price {
+  font-size: 24px;
+  letter-spacing: -0.6px;
+  margin: 2px 0 10px;
+}
+.lp-card.accent {
+  background: var(--lavender);
+  border-color: var(--lavender-strong);
+}
+
+/* ── Landing: steps ─────────────────────────────── */
+.lp-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.lp-steps li {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 3px 13px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+}
+.lp-steps b {
+  grid-row: span 2;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  display: grid;
+  place-items: center;
+}
+.lp-steps strong {
+  font-size: 15px;
+  font-weight: 800;
+}
+.lp-steps span {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+/* ── Landing: footer ────────────────────────────── */
+.lp-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 28px var(--lp-gutter) 34px;
+  border-top: 1px solid var(--line);
+}
+.lp-footer span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Landing: desktop ───────────────────────────── */
+@media (min-width: 900px) {
+  .lp-links {
+    display: flex;
+  }
+  .lp-hero {
+    flex-direction: row;
+    align-items: center;
+    gap: 48px;
+    padding: 72px 24px 88px;
+  }
+  .lp-copy {
+    flex: 1.2;
+  }
+  .lp-copy h1 {
+    font-size: 44px;
+    letter-spacing: -1.9px;
+  }
+  .lp-collage {
+    flex: 1;
+    max-width: none;
+    height: 420px;
+    margin: 0;
+  }
+  .lp-values {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 34px;
+  }
+  .lp-values > div {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    align-items: start;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 15px;
+  }
+  .lp-values span {
+    grid-row: auto;
+    margin-bottom: 4px;
+  }
+  .lp-section {
+    padding: 68px 24px;
+  }
+  .lp-section h2 {
+    font-size: 26px;
+    margin-bottom: 28px;
+  }
+  .lp-grid,
+  .lp-grid.two {
+    grid-template-columns: 1fr 1fr;
+  }
+  .lp-steps {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .lp-steps li {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    align-items: start;
+    padding: 22px;
+  }
+  .lp-steps b {
+    grid-row: auto;
+    margin-bottom: 4px;
+  }
+  .lp-footer {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}

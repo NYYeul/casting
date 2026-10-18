@@ -1,10 +1,4 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
-@import '../styles/shared.css';
-@import '../styles/landing.css';
-@import '../styles/auth.css';
-@import '../styles/actor.css';
-@import '../styles/studio.css';
-@import '../styles/actor-detail.css';
 
 :root {
   --primary: #6c3df4;
