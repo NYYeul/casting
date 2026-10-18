@@ -76,14 +76,67 @@ function db() {
       message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'sent', created_at TEXT NOT NULL,
       UNIQUE(actor_id, role_id)
     );
+    CREATE TABLE IF NOT EXISTS team_members (
+      project_id TEXT NOT NULL REFERENCES projects(id),
+      user_id TEXT NOT NULL REFERENCES users(id),
+      member_role TEXT NOT NULL DEFAULT 'member',
+      invited_at TEXT NOT NULL,
+      PRIMARY KEY (project_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS board_votes (
+      application_id TEXT NOT NULL REFERENCES applications(id),
+      user_id TEXT NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (application_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS board_notes (
+      id TEXT PRIMARY KEY, application_id TEXT NOT NULL REFERENCES applications(id),
+      user_id TEXT NOT NULL REFERENCES users(id), body TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS board_notes_app ON board_notes(application_id, created_at);
+    CREATE TABLE IF NOT EXISTS compare_results (
+      id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id),
+      title TEXT NOT NULL, role_id TEXT, bracket_json TEXT NOT NULL,
+      winner_label TEXT NOT NULL, created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS audition_events (
+      id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id),
+      project_id TEXT, title TEXT NOT NULL, actor_name TEXT NOT NULL,
+      starts_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled',
+      note TEXT NOT NULL DEFAULT '', application_id TEXT, created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS audition_events_owner ON audition_events(owner_id, starts_at);
+    CREATE TABLE IF NOT EXISTS project_candidates (
+      id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id),
+      actor_id TEXT NOT NULL REFERENCES users(id), added_by TEXT NOT NULL REFERENCES users(id),
+      column_key TEXT NOT NULL DEFAULT 'review', created_at TEXT NOT NULL,
+      UNIQUE(project_id, actor_id)
+    );
+    CREATE TABLE IF NOT EXISTS candidate_votes (
+      candidate_id TEXT NOT NULL REFERENCES project_candidates(id),
+      user_id TEXT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL,
+      PRIMARY KEY (candidate_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS candidate_notes (
+      id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL REFERENCES project_candidates(id),
+      user_id TEXT NOT NULL REFERENCES users(id), body TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS candidate_notes_app ON candidate_notes(candidate_id, created_at);
   `);
   addColumn(database, 'applications', 'chat_open', 'INTEGER NOT NULL DEFAULT 0');
   addColumn(database, 'applications', 'actor_id', 'TEXT');
   addColumn(database, 'roles', 'owner_id', 'TEXT');
   addColumn(database, 'roles', 'project_id', 'TEXT');
+  addColumn(database, 'actor_profiles', 'agency', "TEXT NOT NULL DEFAULT ''");
+  addColumn(database, 'actor_profiles', 'documents', "TEXT NOT NULL DEFAULT '[]'");
+  addColumn(database, 'audition_events', 'place', "TEXT NOT NULL DEFAULT ''");
+  addColumn(database, 'audition_events', 'meeting_type', "TEXT NOT NULL DEFAULT ''");
   if (process.env.NODE_ENV !== 'production' && process.env.SEED_DEMO !== 'false') {
     seedDemo(database);
     seedAccounts(database);
+    seedTeams(database);
   }
   return database;
 }
@@ -585,7 +638,7 @@ function seedDemo(connection: DatabaseSync) {
       email: `${randomBytes(4).toString('hex')}@example.com`,
       phone: '010-0000-0000',
       introduction,
-      photoUrl: `https://i.pravatar.cc/160?img=${photo}`,
+      photoUrl: `/avatars/p${String(((photo - 1) % 20) + 1).padStart(2, '0')}.svg`,
       videoUrl: 'https://example.com/showreel',
       available,
       travel: 'yes',
@@ -857,7 +910,11 @@ function seedAccounts(connection: DatabaseSync) {
           intro,
           JSON.stringify(tags),
           JSON.stringify(skills),
-          JSON.stringify(photos.map((photo) => `https://i.pravatar.cc/480?img=${photo}`)),
+          JSON.stringify(
+            photos.map(
+              (photo) => `/avatars/p${String(((photo - 1) % 20) + 1).padStart(2, '0')}.svg`,
+            ),
+          ),
           'https://www.youtube.com/watch?v=ScMzIvxBSi4',
           JSON.stringify([
             {
@@ -876,4 +933,93 @@ function seedAccounts(connection: DatabaseSync) {
         );
     },
   );
+}
+
+function seedTeams(connection: DatabaseSync) {
+  const seeded = connection.prepare('SELECT COUNT(*) count FROM team_members').get() as {
+    count: number;
+  };
+  if (seeded.count) return;
+  const producer = connection
+    .prepare("SELECT id FROM users WHERE email='producer@demo.casting'")
+    .get() as { id: string } | undefined;
+  if (!producer) return;
+  const producerId = producer.id;
+  const now = new Date().toISOString();
+  const ownedProjects = connection
+    .prepare('SELECT id, title FROM projects WHERE owner_id=?')
+    .all(producerId) as { id: string; title: string }[];
+  for (const project of ownedProjects) {
+    connection
+      .prepare(
+        'INSERT OR IGNORE INTO team_members (project_id,user_id,member_role,invited_at) VALUES (?,?,?,?)',
+      )
+      .run(project.id, producerId, 'owner', now);
+  }
+  const directorId = randomUUID();
+  connection
+    .prepare(
+      `INSERT OR IGNORE INTO users (id,email,password_hash,role,name,phone,org_type,org_name,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`,
+    )
+    .run(
+      directorId,
+      'director@demo.casting',
+      hashPassword(DEMO_PASSWORD),
+      'producer',
+      '김감독',
+      '010-7777-8888',
+      '프리랜서',
+      '김감독 스튜디오',
+      now,
+    );
+  const director = connection
+    .prepare("SELECT id FROM users WHERE email='director@demo.casting'")
+    .get() as { id: string };
+  const firstProject = ownedProjects[0];
+  if (firstProject) {
+    connection
+      .prepare(
+        'INSERT OR IGNORE INTO team_members (project_id,user_id,member_role,invited_at) VALUES (?,?,?,?)',
+      )
+      .run(firstProject.id, director.id, 'member', now);
+    const sampleApps = connection
+      .prepare(
+        `SELECT a.id FROM applications a JOIN roles r ON a.role_id=r.id
+         WHERE r.project_id=? ORDER BY a.created_at LIMIT 3`,
+      )
+      .all(firstProject.id) as { id: string }[];
+    const [appA, appB, appC] = sampleApps;
+    if (appA) {
+      connection
+        .prepare(
+          'INSERT OR IGNORE INTO board_votes (application_id,user_id,created_at) VALUES (?,?,?)',
+        )
+        .run(appA.id, producerId, now);
+      connection
+        .prepare(
+          'INSERT OR IGNORE INTO board_votes (application_id,user_id,created_at) VALUES (?,?,?)',
+        )
+        .run(appA.id, director.id, now);
+      connection
+        .prepare(
+          'INSERT INTO board_notes (id,application_id,user_id,body,created_at) VALUES (?,?,?,?,?)',
+        )
+        .run(randomUUID(), appA.id, director.id, '첫인상이 배역 이미지와 잘 맞아요.', now);
+    }
+    if (appB) {
+      connection
+        .prepare(
+          'INSERT OR IGNORE INTO board_votes (application_id,user_id,created_at) VALUES (?,?,?)',
+        )
+        .run(appB.id, producerId, now);
+    }
+    if (appC) {
+      connection
+        .prepare(
+          'INSERT INTO board_notes (id,application_id,user_id,body,created_at) VALUES (?,?,?,?,?)',
+        )
+        .run(randomUUID(), appC.id, producerId, '연기 영상 확인 후 다시 얘기해요.', now);
+    }
+  }
 }

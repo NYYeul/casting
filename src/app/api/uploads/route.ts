@@ -15,6 +15,7 @@ function detectImage(bytes: Uint8Array) {
     String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP'
   )
     return 'webp';
+  if (String.fromCharCode(...bytes.slice(0, 5)) === '%PDF-') return 'pdf';
   return null;
 }
 
@@ -26,11 +27,14 @@ export async function POST(request: NextRequest) {
   if (!(file instanceof File))
     return NextResponse.json({ error: '파일을 선택해 주세요.' }, { status: 400 });
   if (file.size > MAX_BYTES)
-    return NextResponse.json({ error: '사진은 5MB 이하만 올릴 수 있습니다.' }, { status: 413 });
+    return NextResponse.json({ error: '파일은 5MB 이하만 올릴 수 있습니다.' }, { status: 413 });
   const bytes = new Uint8Array(await file.arrayBuffer());
   const ext = detectImage(bytes);
   if (!ext)
-    return NextResponse.json({ error: 'JPG, PNG, WEBP 사진만 올릴 수 있습니다.' }, { status: 415 });
+    return NextResponse.json(
+      { error: 'JPG, PNG, WEBP 사진 또는 PDF만 올릴 수 있습니다.' },
+      { status: 415 },
+    );
   const dir = join(process.cwd(), 'data', 'uploads');
   await mkdir(dir, { recursive: true });
   const name = `${randomUUID()}.${ext}`;

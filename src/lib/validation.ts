@@ -13,11 +13,12 @@ export function safeUrl(value: unknown) {
   }
 }
 
-export const UPLOAD_PATTERN = /^\/api\/uploads\/[a-f0-9-]{36}\.(jpg|png|webp)$/;
+export const UPLOAD_PATTERN = /^\/api\/uploads\/[a-f0-9-]{36}\.(jpg|png|webp|pdf)$/;
+const AVATAR_PATTERN = /^\/avatars\/p\d{2}\.svg$/;
 
 export function safeImageRef(value: unknown) {
   const text = requiredText(value, 1000);
-  return UPLOAD_PATTERN.test(text) ? text : safeUrl(text);
+  return UPLOAD_PATTERN.test(text) || AVATAR_PATTERN.test(text) ? text : safeUrl(text);
 }
 
 export function validEmail(value: string) {

@@ -1,14 +1,15 @@
 'use client';
 
+import Link from 'next/link';
 import { useRef, useState } from 'react';
 import ActorNav from '@/components/actor-nav';
+import type { ActorProfileFull, ProfileDocument } from '@/lib/accounts';
 import {
   IMAGE_TAGS,
   MAX_TAGS,
   profileCompletion,
   REGIONS,
   SKILLS,
-  type ActorProfile,
   type Gender,
 } from '@/lib/profile';
 import { embedUrl } from '@/lib/video';
@@ -19,19 +20,28 @@ const SECTIONS = [
   ['video', '연기 영상'],
   ['image', '이미지·특기'],
   ['filmo', '필모그래피'],
+  ['docs', '자료실'],
   ['schedule', '출연 불가 일정'],
   ['visibility', '공개 설정'],
 ] as const;
+
+type ActorProfile = ActorProfileFull;
+
+// Mirror of MAX_DOCUMENTS in @/lib/accounts — that module is server-only
+// (pulls in node:sqlite), so it cannot be imported from a client component.
+const MAX_DOCUMENTS = 5;
 
 export default function ProfileEditor({ initial }: { initial: ActorProfile }) {
   const [profile, setProfile] = useState(initial);
   const [saved, setSaved] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [docUploading, setDocUploading] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [newDate, setNewDate] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
+  const docInput = useRef<HTMLInputElement>(null);
   const completion = profileCompletion(profile);
   const dirty = JSON.stringify(profile) !== JSON.stringify(saved);
 
@@ -78,6 +88,36 @@ export default function ProfileEditor({ initial }: { initial: ActorProfile }) {
     }
   }
 
+  async function uploadDocument(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    if (profile.documents.length >= MAX_DOCUMENTS) {
+      setError(`자료는 최대 ${MAX_DOCUMENTS}개까지 올릴 수 있어요.`);
+      if (docInput.current) docInput.current.value = '';
+      return;
+    }
+    setDocUploading(true);
+    setError('');
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const response = await fetch('/api/uploads', { method: 'POST', body: form });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '자료를 올리지 못했습니다.');
+      const document: ProfileDocument = { name: file.name, url: data.url };
+      setProfile((current) => ({
+        ...current,
+        documents: [...current.documents, document].slice(0, MAX_DOCUMENTS),
+      }));
+      setNotice('자료를 올렸습니다. 저장을 눌러 프로필에 반영하세요.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '자료를 올리지 못했습니다.');
+    } finally {
+      setDocUploading(false);
+      if (docInput.current) docInput.current.value = '';
+    }
+  }
+
   async function save() {
     setBusy(true);
     setError('');
@@ -103,7 +143,12 @@ export default function ProfileEditor({ initial }: { initial: ActorProfile }) {
     <main className="app-shell wide">
       <ActorNav active="profile" actorId={profile.userId} />
       <div className="screen-pad page-top">
-        <h1 className="page-title">프로필 관리</h1>
+        <div className="title-row">
+          <h1 className="page-title">프로필 관리</h1>
+          <Link className="button button-outline sm" href={`/actors/${profile.userId}`}>
+            프로필 미리보기
+          </Link>
+        </div>
         <div className="completion-card static">
           <div>
             <strong>프로필 완성도 {completion}%</strong>
@@ -192,6 +237,15 @@ export default function ProfileEditor({ initial }: { initial: ActorProfile }) {
                     </select>
                   </label>
                 </div>
+                <label>
+                  소속/에이전시
+                  <input
+                    value={profile.agency}
+                    maxLength={60}
+                    placeholder="소속사 또는 에이전시명 (없으면 비워 두세요)"
+                    onChange={(event) => update('agency', event.target.value)}
+                  />
+                </label>
                 <label>
                   소개글
                   <textarea
@@ -389,6 +443,57 @@ export default function ProfileEditor({ initial }: { initial: ActorProfile }) {
               >
                 ＋ 작품 추가
               </button>
+            </section>
+
+            <section id="docs" className="editor-card">
+              <h2>
+                자료실{' '}
+                <small>
+                  PDF 최대 {MAX_DOCUMENTS}개 · {profile.documents.length}개 등록
+                </small>
+              </h2>
+              <p className="muted" style={{ marginBottom: 12 }}>
+                경력기장, 포트폴리오 등 PDF 자료를 올리면 제작자가 프로필에서 열어볼 수 있습니다.
+              </p>
+              {profile.documents.length > 0 && (
+                <ul className="filmo" style={{ marginBottom: 12 }}>
+                  {profile.documents.map((doc) => (
+                    <li key={doc.url}>
+                      <a href={doc.url} target="_blank" rel="noreferrer">
+                        {doc.name || '첨부 자료'} ↗
+                      </a>
+                      <button
+                        className="text-button"
+                        aria-label={`${doc.name || '첨부 자료'} 삭제`}
+                        onClick={() =>
+                          update(
+                            'documents',
+                            profile.documents.filter((item) => item.url !== doc.url),
+                          )
+                        }
+                      >
+                        삭제
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {profile.documents.length < MAX_DOCUMENTS && (
+                <button
+                  className="button button-soft full"
+                  disabled={docUploading}
+                  onClick={() => docInput.current?.click()}
+                >
+                  {docUploading ? '올리는 중…' : '＋ PDF 자료 추가'}
+                </button>
+              )}
+              <input
+                ref={docInput}
+                type="file"
+                accept="application/pdf,.pdf"
+                hidden
+                onChange={(event) => void uploadDocument(event.target.files)}
+              />
             </section>
 
             <section id="schedule" className="editor-card">

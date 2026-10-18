@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import ProducerNav from '@/components/producer-nav';
-import { ageOf, genderLabel, type ActorProfile } from '@/lib/profile';
+import type { ActorProfileFull } from '@/lib/accounts';
+import { ageOf, genderLabel } from '@/lib/profile';
 import { embedUrl } from '@/lib/video';
 
-type Tab = 'intro' | 'video' | 'filmo' | 'photos';
+type Tab = 'intro' | 'video' | 'filmo' | 'photos' | 'docs';
 
 export default function ActorDetail({
   profile,
@@ -15,7 +16,7 @@ export default function ActorDetail({
   roles,
   proposedRoleIds,
 }: {
-  profile: ActorProfile;
+  profile: ActorProfileFull;
   viewer: 'producer' | 'self';
   favorite: boolean;
   roles: { id: string; label: string }[];
@@ -36,6 +37,9 @@ export default function ActorDetail({
   const age = ageOf(profile.birthYear);
   const embed = profile.videoUrl ? embedUrl(profile.videoUrl) : null;
   const available = roles.filter((role) => !proposed.includes(role.id));
+  const proposedLabels = roles
+    .filter((role) => proposed.includes(role.id))
+    .map((role) => role.label);
 
   async function toggleFavorite() {
     const next = !favorite;
@@ -133,6 +137,7 @@ export default function ActorDetail({
               )}
             </div>
             <p className="facts">{facts.join(' | ') || '기본 정보 미입력'}</p>
+            {profile.agency && <p className="facts">소속 · {profile.agency}</p>}
             {profile.tags.length > 0 && (
               <div className="tag-row big">
                 {profile.tags.map((tag) => (
@@ -147,6 +152,7 @@ export default function ActorDetail({
                   ['video', '영상'],
                   ['filmo', '필모그래피'],
                   ['photos', '사진'],
+                  ...(profile.documents.length > 0 ? ([['docs', '자료']] as [Tab, string][]) : []),
                 ] as [Tab, string][]
               ).map(([value, label]) => (
                 <button
@@ -244,6 +250,20 @@ export default function ActorDetail({
                 )}
               </div>
             )}
+            {tab === 'docs' && (
+              <div className="tab-body">
+                <h3>추가 자료</h3>
+                <ul className="filmo">
+                  {profile.documents.map((doc) => (
+                    <li key={doc.url}>
+                      <a href={doc.url} target="_blank" rel="noreferrer">
+                        {doc.name || '첨부 자료'} ↗
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -269,6 +289,9 @@ export default function ActorDetail({
                 ×
               </button>
             </div>
+            {proposedLabels.length > 0 && (
+              <p className="small-note">이미 제안한 배역: {proposedLabels.join(', ')}</p>
+            )}
             {available.length === 0 ? (
               <div className="empty-card">
                 {roles.length === 0 ? (

@@ -6,6 +6,8 @@ import ProducerNav from '@/components/producer-nav';
 
 const GENRES = ['단편영화', '장편영화', '웹드라마', '숏폼', '광고', '뮤직비디오', '연극', '기타'];
 const STEPS = ['기본 정보', '배역 정보', '일정·조건', '확인'];
+// 수정 모드: 배역·지원 조건은 PATCH 범위 밖(지원 링크 관리에서 수정)이라 2단계만 사용
+const EDIT_STEPS = ['기본 정보', '확인'];
 const DRAFT_KEY = 'casting_project_draft';
 
 type RoleDraft = { title: string; description: string; requirement: string };
@@ -23,9 +25,24 @@ type Draft = {
   contactName: string;
 };
 
+export type ProjectInitial = Pick<
+  Draft,
+  'title' | 'genre' | 'shootStart' | 'shootEnd' | 'location' | 'description'
+>;
+
 const blankRole = (): RoleDraft => ({ title: '', description: '', requirement: '' });
 
-export default function ProjectWizard({ contactName }: { contactName: string }) {
+type Props = {
+  contactName: string;
+  /** 수정 모드: 프로젝트 id (없으면 신규 등록) */
+  editId?: string;
+  /** 수정 모드: 기존 프로젝트 값 */
+  initial?: Partial<ProjectInitial>;
+};
+
+export default function ProjectWizard({ contactName, editId, initial }: Props) {
+  const isEdit = Boolean(editId);
+  const steps = isEdit ? EDIT_STEPS : STEPS;
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<Draft>({
     title: '',
@@ -39,12 +56,14 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
     announcementDate: '',
     pay: '',
     contactName,
+    ...initial,
   });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (isEdit) return; // 수정 모드에서는 신규 등록 임시 저장을 불러오지 않는다
     try {
       const saved = localStorage.getItem(DRAFT_KEY);
       if (saved) {
@@ -54,7 +73,7 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
     } catch {
       /* 손상된 임시 저장은 무시 */
     }
-  }, []);
+  }, [isEdit]);
 
   const set =
     (key: keyof Draft) =>
@@ -74,13 +93,13 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
         return '촬영 종료일이 시작일보다 빠릅니다.';
       if (!draft.location.trim()) return '촬영 지역을 입력해 주세요.';
     }
-    if (step === 1) {
+    if (step === 1 && !isEdit) {
       const filled = draft.roles.filter((role) => role.title.trim() || role.description.trim());
       if (filled.length === 0) return '배역을 하나 이상 입력해 주세요.';
       if (filled.some((role) => !role.title.trim() || !role.description.trim()))
         return '배역명과 배역 설명을 모두 입력해 주세요.';
     }
-    if (step === 2) {
+    if (step === 2 && !isEdit) {
       if (!draft.deadline || !draft.announcementDate)
         return '지원 마감일과 결과 안내일을 입력해 주세요.';
       if (draft.announcementDate < draft.deadline)
@@ -92,6 +111,7 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
   }
 
   function saveDraft() {
+    if (isEdit) return;
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     setNotice('이 기기에 임시 저장했습니다.');
   }
@@ -103,7 +123,7 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
       return;
     }
     setError('');
-    if (step < STEPS.length - 1) {
+    if (step < steps.length - 1) {
       setStep(step + 1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
@@ -111,23 +131,38 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
     setBusy(true);
     try {
       const response = await fetch('/api/projects', {
-        method: 'POST',
+        method: isEdit ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...draft,
-          roles: draft.roles.filter((role) => role.title.trim()),
-        }),
+        body: isEdit
+          ? JSON.stringify({
+              id: editId,
+              title: draft.title,
+              genre: draft.genre,
+              shootStart: draft.shootStart,
+              shootEnd: draft.shootEnd,
+              location: draft.location,
+              description: draft.description,
+            })
+          : JSON.stringify({
+              ...draft,
+              roles: draft.roles.filter((role) => role.title.trim()),
+            }),
       });
       const data = await response.json();
       if (response.status === 401) {
-        location.href = '/login?next=/studio/projects/new';
+        location.href = `/login?next=${isEdit ? `/studio/projects/${editId}/edit` : '/studio/projects/new'}`;
         return;
       }
-      if (!response.ok) throw new Error(data.error || '프로젝트를 등록하지 못했습니다.');
-      localStorage.removeItem(DRAFT_KEY);
+      if (!response.ok)
+        throw new Error(data.error || `프로젝트를 ${isEdit ? '수정' : '등록'}하지 못했습니다.`);
+      if (!isEdit) localStorage.removeItem(DRAFT_KEY);
       location.href = '/studio?tab=applicants';
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '프로젝트를 등록하지 못했습니다.');
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : `프로젝트를 ${isEdit ? '수정' : '등록'}하지 못했습니다.`,
+      );
       setBusy(false);
     }
   }
@@ -141,7 +176,7 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
         </Link>
         <div className="wizard-shell">
           <ol className="wizard-steps vertical">
-            {STEPS.map((label, index) => (
+            {steps.map((label, index) => (
               <li key={label} className={index === step ? 'on' : index < step ? 'done' : ''}>
                 <b>{index < step ? '✓' : index + 1}</b>
                 <span>{label}</span>
@@ -150,16 +185,21 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
           </ol>
           <section className="wizard-panel">
             <h1 className="page-title" style={{ marginBottom: 6 }}>
-              프로젝트 등록
+              {isEdit ? '프로젝트 수정' : '프로젝트 등록'}
             </h1>
             <p className="muted" style={{ marginBottom: 20 }}>
               {
-                [
-                  '프로젝트의 기본 정보를 입력해 주세요. 배우가 지원 여부를 판단하는 데 쓰입니다.',
-                  '모집할 배역을 추가해 주세요. 배역마다 지원 링크가 따로 만들어집니다.',
-                  '지원 일정과 출연 조건을 정해 주세요.',
-                  '입력한 내용을 확인하고 게시하세요.',
-                ][step]
+                (isEdit
+                  ? [
+                      '프로젝트 기본 정보를 수정합니다. 배역·지원 조건은 지원 링크 관리에서 변경하세요.',
+                      '수정할 내용을 확인하고 저장하세요.',
+                    ]
+                  : [
+                      '프로젝트의 기본 정보를 입력해 주세요. 배우가 지원 여부를 판단하는 데 쓰입니다.',
+                      '모집할 배역을 추가해 주세요. 배역마다 지원 링크가 따로 만들어집니다.',
+                      '지원 일정과 출연 조건을 정해 주세요.',
+                      '입력한 내용을 확인하고 게시하세요.',
+                    ])[step]
               }
             </p>
             <div className="role-form">
@@ -212,7 +252,7 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
                   </label>
                 </>
               )}
-              {step === 1 && (
+              {!isEdit && step === 1 && (
                 <>
                   {draft.roles.map((role, index) => (
                     <div key={index} className="role-block">
@@ -276,7 +316,7 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
                   )}
                 </>
               )}
-              {step === 2 && (
+              {!isEdit && step === 2 && (
                 <>
                   <div className="form-two">
                     <label>
@@ -310,7 +350,7 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
                   </label>
                 </>
               )}
-              {step === 3 && (
+              {step === steps.length - 1 && (
                 <div className="review-card">
                   <div>
                     <span>작품</span>
@@ -328,31 +368,46 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
                       · {draft.location}
                     </strong>
                   </div>
-                  <div>
-                    <span>배역</span>
-                    <strong>
-                      {draft.roles
-                        .filter((role) => role.title.trim())
-                        .map((role) => role.title)
-                        .join(', ')}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>지원 마감</span>
-                    <strong>{draft.deadline}</strong>
-                  </div>
-                  <div>
-                    <span>결과 안내</span>
-                    <strong>{draft.announcementDate}</strong>
-                  </div>
-                  <div>
-                    <span>조건</span>
-                    <strong>{draft.pay}</strong>
-                  </div>
-                  <div>
-                    <span>담당자</span>
-                    <strong>{draft.contactName}</strong>
-                  </div>
+                  {draft.description.trim() && (
+                    <div>
+                      <span>소개</span>
+                      <strong>{draft.description}</strong>
+                    </div>
+                  )}
+                  {isEdit ? (
+                    <div>
+                      <span>배역·조건</span>
+                      <strong>배역 수정은 지원 링크 관리에서 진행하세요.</strong>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <span>배역</span>
+                        <strong>
+                          {draft.roles
+                            .filter((role) => role.title.trim())
+                            .map((role) => role.title)
+                            .join(', ')}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>지원 마감</span>
+                        <strong>{draft.deadline}</strong>
+                      </div>
+                      <div>
+                        <span>결과 안내</span>
+                        <strong>{draft.announcementDate}</strong>
+                      </div>
+                      <div>
+                        <span>조건</span>
+                        <strong>{draft.pay}</strong>
+                      </div>
+                      <div>
+                        <span>담당자</span>
+                        <strong>{draft.contactName}</strong>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
               {error && (
@@ -361,9 +416,11 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
                 </p>
               )}
               <div className="wizard-actions">
-                <button type="button" className="button button-outline" onClick={saveDraft}>
-                  임시 저장
-                </button>
+                {!isEdit && (
+                  <button type="button" className="button button-outline" onClick={saveDraft}>
+                    임시 저장
+                  </button>
+                )}
                 {step > 0 && (
                   <button
                     type="button"
@@ -379,10 +436,14 @@ export default function ProjectWizard({ contactName }: { contactName: string }) 
                   disabled={busy}
                   onClick={() => void next()}
                 >
-                  {step === STEPS.length - 1
+                  {step === steps.length - 1
                     ? busy
-                      ? '게시 중…'
-                      : '프로젝트 게시하기'
+                      ? isEdit
+                        ? '수정 중…'
+                        : '게시 중…'
+                      : isEdit
+                        ? '수정하기'
+                        : '프로젝트 게시하기'
                     : '다음 단계 →'}
                 </button>
               </div>

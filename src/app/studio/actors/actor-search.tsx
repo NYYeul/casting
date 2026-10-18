@@ -1,11 +1,22 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import ProducerNav from '@/components/producer-nav';
-import { ageOf, genderLabel, IMAGE_TAGS, REGIONS, SKILLS, type ActorProfile } from '@/lib/profile';
+import type { ActorProfileFull } from '@/lib/accounts';
+import { ageOf, genderLabel, IMAGE_TAGS, REGIONS, SKILLS } from '@/lib/profile';
 
-type Result = ActorProfile & { favorite: boolean };
+type Result = ActorProfileFull & { favorite: boolean };
+
+const PAGE_SIZE = 20;
+
+const CAREER_OPTIONS: [string, string][] = [
+  ['', '전체'],
+  ['1', '경력 있음 (1편 이상)'],
+  ['3', '3편 이상'],
+  ['5', '5편 이상'],
+  ['10', '10편 이상'],
+];
 
 const AGE_RANGES: [string, number, number][] = [
   ['10대', 10, 19],
@@ -25,6 +36,7 @@ const EMPTY = {
   skill: '',
   tag: '',
   available: '',
+  career: '',
   favorites: false,
   sort: 'recent',
 };
@@ -32,12 +44,19 @@ const EMPTY = {
 export default function ActorSearch() {
   const [filters, setFilters] = useState(EMPTY);
   const [actors, setActors] = useState<Result[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [sheet, setSheet] = useState(false);
+  const loadSeq = useRef(0);
 
-  const load = useCallback(async (current: typeof EMPTY) => {
-    setLoading(true);
+  const load = useCallback(async (current: typeof EMPTY, offset = 0, append = false) => {
+    // A fresh (non-append) load invalidates any in-flight "더 보기" request.
+    const seq = append ? loadSeq.current : ++loadSeq.current;
+    if (append) setLoadingMore(true);
+    else setLoading(true);
     const params = new URLSearchParams();
     const range = AGE_RANGES.find(([label]) => label === current.age);
     if (range) {
@@ -56,7 +75,10 @@ export default function ActorSearch() {
       'sort',
     ] as const)
       if (current[key]) params.set(key, current[key]);
+    if (current.career) params.set('careerMin', current.career);
     if (current.favorites) params.set('favorites', '1');
+    params.set('limit', String(PAGE_SIZE));
+    params.set('offset', String(offset));
     try {
       const response = await fetch(`/api/actors?${params}`, { cache: 'no-store' });
       if (response.status === 401) {
@@ -65,12 +87,17 @@ export default function ActorSearch() {
       }
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '배우를 불러오지 못했습니다.');
-      setActors(data.actors);
+      if (seq !== loadSeq.current) return; // stale page — a newer search already ran
+      const page: Result[] = data.results || [];
+      setTotal(typeof data.total === 'number' ? data.total : page.length);
+      setHasMore(Boolean(data.hasMore));
+      setActors((prev) => (append ? [...prev, ...page] : page));
       setError('');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '배우를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, []);
 
@@ -95,7 +122,7 @@ export default function ActorSearch() {
   }
 
   const activeCount = (
-    ['gender', 'age', 'heightMin', 'heightMax', 'region', 'skill', 'available'] as const
+    ['gender', 'age', 'heightMin', 'heightMax', 'region', 'skill', 'available', 'career'] as const
   ).filter((key) => filters[key]).length;
 
   const filterPanel = (
@@ -181,6 +208,17 @@ export default function ActorSearch() {
         </select>
       </fieldset>
       <fieldset>
+        <legend>출연 경력</legend>
+        <select value={filters.career} onChange={(event) => set('career', event.target.value)}>
+          {CAREER_OPTIONS.map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <small>필모그래피에 등록된 작품 수 기준입니다.</small>
+      </fieldset>
+      <fieldset>
         <legend>출연 가능 일정</legend>
         <input
           type="date"
@@ -201,7 +239,7 @@ export default function ActorSearch() {
             <p className="greet-sub">조건에 맞는 배우를 찾아보세요</p>
             <h1 className="page-title">배우 검색</h1>
           </div>
-          <span className="count-pill">{loading ? '…' : `${actors.length}명`}</span>
+          <span className="count-pill">{loading ? '…' : `${total}명의 배우`}</span>
         </div>
         <div className="search-row">
           <div className="search-box">
@@ -272,48 +310,60 @@ export default function ActorSearch() {
                 필터를 조금 넓혀 보세요.
               </div>
             ) : (
-              <div className="actor-grid">
-                {actors.map((actor) => (
-                  <div key={actor.userId} className="actor-tile">
-                    <Link href={`/actors/${actor.userId}`} className="tile-photo">
-                      {actor.photos[0] ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={actor.photos[0]}
-                          alt={`${actor.name} 프로필 사진`}
-                          loading="lazy"
-                        />
-                      ) : (
-                        <span>{actor.name.slice(-2)}</span>
-                      )}
-                    </Link>
-                    <button
-                      className={`heart${actor.favorite ? ' on' : ''}`}
-                      aria-label={actor.favorite ? '관심 해제' : '관심 저장'}
-                      onClick={() => void toggleFavorite(actor)}
-                    >
-                      {actor.favorite ? '♥' : '♡'}
-                    </button>
-                    <Link href={`/actors/${actor.userId}`} className="tile-info">
-                      <strong>{actor.name}</strong>
-                      <span>
-                        {[
-                          ageOf(actor.birthYear) !== null ? `${ageOf(actor.birthYear)}세` : '',
-                          actor.height ? `${actor.height}cm` : '',
-                          actor.region,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ') || genderLabel[actor.gender]}
-                      </span>
-                      <div className="tag-row">
-                        {actor.tags.slice(0, 2).map((tag) => (
-                          <i key={tag}>{tag}</i>
-                        ))}
-                      </div>
-                    </Link>
-                  </div>
-                ))}
-              </div>
+              <>
+                <div className="actor-grid">
+                  {actors.map((actor) => (
+                    <div key={actor.userId} className="actor-tile">
+                      <Link href={`/actors/${actor.userId}`} className="tile-photo">
+                        {actor.photos[0] ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={actor.photos[0]}
+                            alt={`${actor.name} 프로필 사진`}
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span>{actor.name.slice(-2)}</span>
+                        )}
+                      </Link>
+                      <button
+                        className={`heart${actor.favorite ? ' on' : ''}`}
+                        aria-label={actor.favorite ? '관심 해제' : '관심 저장'}
+                        onClick={() => void toggleFavorite(actor)}
+                      >
+                        {actor.favorite ? '♥' : '♡'}
+                      </button>
+                      <Link href={`/actors/${actor.userId}`} className="tile-info">
+                        <strong>{actor.name}</strong>
+                        <span>
+                          {[
+                            ageOf(actor.birthYear) !== null ? `${ageOf(actor.birthYear)}세` : '',
+                            actor.height ? `${actor.height}cm` : '',
+                            actor.region,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ') || genderLabel[actor.gender]}
+                        </span>
+                        {actor.agency && <span className="muted">{actor.agency}</span>}
+                        <div className="tag-row">
+                          {actor.tags.slice(0, 2).map((tag) => (
+                            <i key={tag}>{tag}</i>
+                          ))}
+                        </div>
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+                {hasMore && (
+                  <button
+                    className="button button-soft full"
+                    disabled={loadingMore}
+                    onClick={() => void load(filters, actors.length, true)}
+                  >
+                    {loadingMore ? '불러오는 중…' : `더 보기 (${actors.length}/${total})`}
+                  </button>
+                )}
+              </>
             )}
           </section>
         </div>
@@ -324,7 +374,7 @@ export default function ActorSearch() {
             <div className="sheet-handle" />
             {filterPanel}
             <button className="button button-primary full" onClick={() => setSheet(false)}>
-              {actors.length}명 보기
+              {total}명 보기
             </button>
           </section>
         </div>

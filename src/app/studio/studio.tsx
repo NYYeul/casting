@@ -206,6 +206,51 @@ const Icon = {
       />
     </svg>
   ),
+  sparkle: (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      <path
+        d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  vs: (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      <rect x="3" y="6" width="8" height="12" rx="2" />
+      <rect x="13" y="6" width="8" height="12" rx="2" />
+    </svg>
+  ),
+  columns: (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      <rect x="3.5" y="4.5" width="5" height="15" rx="1.6" />
+      <rect x="9.7" y="4.5" width="5" height="10" rx="1.6" />
+      <rect x="15.9" y="4.5" width="5" height="7" rx="1.6" />
+    </svg>
+  ),
 };
 
 function initials(name: string) {
@@ -681,6 +726,11 @@ export default function Studio({
                     <button className="share-row" onClick={() => void shareRole(first)}>
                       {Icon.upload} 지원 링크 공유
                     </button>
+                    {first.projectId && (
+                      <a className="share-row" href={`/studio/projects/${first.projectId}/edit`}>
+                        {Icon.doc} 프로젝트 수정
+                      </a>
+                    )}
                   </section>
                 );
               })
@@ -1052,6 +1102,10 @@ export default function Studio({
             <div className="menu-list">
               <a href="/studio/projects/new">{Icon.folder} 프로젝트 등록</a>
               <a href="/studio/actors">{Icon.search} 배우 찾기</a>
+              <a href="/studio/recommend">{Icon.sparkle} 배우 추천</a>
+              <a href="/studio/compare">{Icon.vs} 후보 비교</a>
+              <a href="/studio/board">{Icon.columns} 팀 보드</a>
+              <a href="/studio/calendar">{Icon.calendar} 오디션 캘린더</a>
               <button
                 onClick={() => {
                   setEditingRole(null);

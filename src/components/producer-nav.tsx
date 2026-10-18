@@ -4,7 +4,16 @@ import Link from 'next/link';
 import { BrandMark } from './brand';
 
 export type ProducerSection =
-  'home' | 'applicants' | 'messages' | 'profile' | 'actors' | 'new-project';
+  | 'home'
+  | 'applicants'
+  | 'messages'
+  | 'profile'
+  | 'actors'
+  | 'new-project'
+  | 'recommend'
+  | 'compare'
+  | 'board'
+  | 'calendar';
 
 const stroke = {
   width: 21,
@@ -49,6 +58,37 @@ const icons: Record<ProducerSection, React.ReactNode> = {
       <path d="M12 8.5v7M8.5 12h7" strokeLinecap="round" />
     </svg>
   ),
+  recommend: (
+    <svg {...stroke}>
+      <path
+        d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M18.5 15.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  compare: (
+    <svg {...stroke}>
+      <rect x="3" y="6" width="8" height="12" rx="2" />
+      <rect x="13" y="6" width="8" height="12" rx="2" />
+    </svg>
+  ),
+  board: (
+    <svg {...stroke}>
+      <rect x="3.5" y="4.5" width="5" height="15" rx="1.6" />
+      <rect x="9.7" y="4.5" width="5" height="10" rx="1.6" />
+      <rect x="15.9" y="4.5" width="5" height="7" rx="1.6" />
+    </svg>
+  ),
+  calendar: (
+    <svg {...stroke}>
+      <rect x="4" y="5.5" width="16" height="15" rx="3" />
+      <path d="M8 3.5v4M16 3.5v4M4 10.5h16" strokeLinecap="round" />
+    </svg>
+  ),
   profile: (
     <svg {...stroke}>
       <circle cx="12" cy="8" r="3.6" />
@@ -62,6 +102,10 @@ const items: { key: ProducerSection; label: string; href: string; mobile: boolea
   { key: 'actors', label: '배우 찾기', href: '/studio/actors', mobile: true },
   { key: 'applicants', label: '지원자', href: '/studio?tab=applicants', mobile: true },
   { key: 'messages', label: '메시지', href: '/studio?tab=messages', mobile: true },
+  { key: 'recommend', label: '배우 추천', href: '/studio/recommend', mobile: false },
+  { key: 'compare', label: '후보 비교', href: '/studio/compare', mobile: false },
+  { key: 'board', label: '팀 보드', href: '/studio/board', mobile: false },
+  { key: 'calendar', label: '캘린더', href: '/studio/calendar', mobile: false },
   { key: 'new-project', label: '프로젝트 등록', href: '/studio/projects/new', mobile: false },
   { key: 'profile', label: '내 정보', href: '/studio?tab=profile', mobile: true },
 ];

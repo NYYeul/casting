@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { getProfile, listFavoriteIds, listProducerProposals } from '@/lib/accounts';
+import { getProfileFull, listFavoriteIds, listProducerProposals } from '@/lib/accounts';
 import { getSession } from '@/lib/auth';
 import { listRoles } from '@/lib/db';
 import ActorDetail from './actor-detail';
@@ -12,7 +12,7 @@ export default async function ActorPage({ params }: { params: Promise<{ id: stri
   if (!session) redirect(`/login?next=/actors/${id}`);
   const isSelf = session.role === 'actor' && session.userId === id;
   if (session.role !== 'producer' && !isSelf) notFound();
-  const profile = getProfile(id);
+  const profile = getProfileFull(id);
   if (!profile || (!profile.isPublic && !isSelf)) notFound();
   const producer = session.role === 'producer';
   const today = new Date().toISOString().slice(0, 10);

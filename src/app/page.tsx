@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 const collage = [12, 47, 5, 59, 25];
 
 const values = [
-  ['✦', 'AI 맞춤 추천', '배역 조건에 맞는 배우를 적합도 순으로 제안'],
+  ['✦', '맞춤 추천', '배역 조건과 프로필을 비교해 적합도 순으로 제안'],
   ['⚡', '빠른 검토', '카드·목록으로 지원자를 한 화면에서 비교'],
   ['👥', '팀 협업', '감독·PD가 함께 후보를 정리'],
 ];
@@ -85,7 +85,7 @@ export default async function Landing() {
             <img
               key={id}
               className={`c${index}`}
-              src={`https://i.pravatar.cc/480?img=${id}`}
+              src={`/avatars/p${String(((id - 1) % 20) + 1).padStart(2, '0')}.svg`}
               alt=""
             />
           ))}
@@ -141,7 +141,7 @@ export default async function Landing() {
           <div className="lp-card accent">
             <span className="badge-soft">Casting Assist</span>
             <strong className="price">프로젝트 단위 · 준비 중</strong>
-            <p>AI 추천, 셀프테이프 요청, 후보 비교와 팀 워크스페이스.</p>
+            <p>맞춤 추천, 셀프테이프 요청, 후보 비교와 팀 워크스페이스.</p>
           </div>
         </div>
       </section>

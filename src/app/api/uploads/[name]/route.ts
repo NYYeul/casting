@@ -2,11 +2,16 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 
-const TYPES: Record<string, string> = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+const TYPES: Record<string, string> = {
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  pdf: 'application/pdf',
+};
 
 export async function GET(_request: NextRequest, context: { params: Promise<{ name: string }> }) {
   const { name } = await context.params;
-  const match = /^([a-f0-9-]{36})\.(jpg|png|webp)$/.exec(name);
+  const match = /^([a-f0-9-]{36})\.(jpg|png|webp|pdf)$/.exec(name);
   if (!match) return new NextResponse('Not found', { status: 404 });
   try {
     const file = await readFile(join(process.cwd(), 'data', 'uploads', name));

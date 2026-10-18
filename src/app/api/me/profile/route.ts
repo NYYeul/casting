@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProfile, updateProfile } from '@/lib/accounts';
+import {
+  getProfileFull,
+  MAX_DOCUMENTS,
+  safeDocumentRef,
+  updateProfile,
+  type ProfileDocument,
+} from '@/lib/accounts';
 import { getActorId } from '@/lib/auth';
 import {
   cleanList,
@@ -22,7 +28,7 @@ function intIn(value: unknown, min: number, max: number) {
 export async function GET() {
   const actorId = await getActorId();
   if (!actorId) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  return NextResponse.json({ profile: getProfile(actorId) });
+  return NextResponse.json({ profile: getProfileFull(actorId) });
 }
 
 export async function PUT(request: NextRequest) {
@@ -45,6 +51,13 @@ export async function PUT(request: NextRequest) {
     .map((item: unknown) => safeImageRef(item))
     .filter(Boolean)
     .slice(0, 8);
+  const documents: ProfileDocument[] = (Array.isArray(body.documents) ? body.documents : [])
+    .map((item: Record<string, unknown>) => ({
+      name: requiredText(item?.name, 120) || '첨부 자료',
+      url: safeDocumentRef(item?.url),
+    }))
+    .filter((doc: ProfileDocument) => doc.url)
+    .slice(0, MAX_DOCUMENTS);
   const name = requiredText(body.name, 60);
   if (!name) return NextResponse.json({ error: '이름을 입력해 주세요.' }, { status: 400 });
   const profile = updateProfile(actorId, {
@@ -64,6 +77,8 @@ export async function PUT(request: NextRequest) {
       /^\d{4}-\d{2}-\d{2}$/.test(date),
     ),
     isPublic: body.isPublic !== false,
+    agency: requiredText(body.agency, 60),
+    documents,
   });
   return NextResponse.json({ profile });
 }

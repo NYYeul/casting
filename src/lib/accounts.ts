@@ -4,6 +4,29 @@ import { hashPassword } from './password';
 import type { ActorProfile, Filmography, Gender } from './profile';
 import type { UserRole } from './session-token';
 
+export type ProfileDocument = { name: string; url: string };
+
+/**
+ * ActorProfile plus the columns added later to actor_profiles
+ * (소속 agency, PDF 자료 documents). getProfile keeps the base ActorProfile
+ * return type for backwards compatibility — use getProfileFull / listPublicProfiles
+ * when the extra fields are needed.
+ */
+export type ActorProfileFull = ActorProfile & {
+  agency: string;
+  documents: ProfileDocument[];
+};
+
+export const MAX_DOCUMENTS = 5;
+
+const PDF_UPLOAD_PATTERN = /^\/api\/uploads\/[a-f0-9-]{36}\.pdf$/;
+
+/** Only PDFs uploaded through /api/uploads may be stored as profile documents. */
+export function safeDocumentRef(value: unknown) {
+  const text = typeof value === 'string' ? value.trim().slice(0, 1000) : '';
+  return PDF_UPLOAD_PATTERN.test(text) ? text : '';
+}
+
 export type User = {
   id: string;
   email: string;
@@ -67,7 +90,17 @@ function parseList<T>(value: unknown): T[] {
   }
 }
 
-function profileFromRow(row: Row): ActorProfile {
+function parseDocuments(value: unknown): ProfileDocument[] {
+  return parseList<ProfileDocument>(value)
+    .map((doc) => ({
+      name: typeof doc?.name === 'string' ? doc.name : '',
+      url: typeof doc?.url === 'string' ? doc.url : '',
+    }))
+    .filter((doc) => doc.url)
+    .slice(0, MAX_DOCUMENTS);
+}
+
+function profileFromRow(row: Row): ActorProfileFull {
   return {
     userId: String(row.user_id),
     name: String(row.name),
@@ -85,6 +118,8 @@ function profileFromRow(row: Row): ActorProfile {
     unavailableDates: parseList<string>(row.unavailable_dates),
     isPublic: Boolean(row.is_public),
     updatedAt: String(row.updated_at),
+    agency: String(row.agency ?? ''),
+    documents: parseDocuments(row.documents),
   };
 }
 
@@ -133,23 +168,34 @@ export function createUser(input: {
 
 const PROFILE_SELECT = `SELECT p.*, u.name FROM actor_profiles p JOIN users u ON u.id=p.user_id`;
 
-export function getProfile(userId: string) {
+export function getProfile(userId: string): ActorProfile | null {
   const row = db().prepare(`${PROFILE_SELECT} WHERE p.user_id=?`).get(userId);
   return row ? profileFromRow(row as Row) : null;
 }
 
-export function listPublicProfiles() {
+export function getProfileFull(userId: string): ActorProfileFull | null {
+  const row = db().prepare(`${PROFILE_SELECT} WHERE p.user_id=?`).get(userId);
+  return row ? profileFromRow(row as Row) : null;
+}
+
+export function listPublicProfiles(): ActorProfileFull[] {
   return db()
     .prepare(`${PROFILE_SELECT} WHERE p.is_public=1 ORDER BY p.updated_at DESC`)
     .all()
     .map((row) => profileFromRow(row as Row));
 }
 
-export function updateProfile(userId: string, input: Omit<ActorProfile, 'userId' | 'updatedAt'>) {
+export function updateProfile(
+  userId: string,
+  input: Omit<ActorProfileFull, 'userId' | 'updatedAt'>,
+) {
+  const documents = input.documents
+    .filter((doc) => safeDocumentRef(doc.url))
+    .slice(0, MAX_DOCUMENTS);
   db()
     .prepare(
       `UPDATE actor_profiles SET gender=?,birth_year=?,height=?,weight=?,region=?,intro=?,tags=?,skills=?,
-      photos=?,video_url=?,filmography=?,unavailable_dates=?,is_public=?,updated_at=? WHERE user_id=?`,
+      photos=?,video_url=?,filmography=?,unavailable_dates=?,is_public=?,agency=?,documents=?,updated_at=? WHERE user_id=?`,
     )
     .run(
       input.gender,
@@ -165,11 +211,13 @@ export function updateProfile(userId: string, input: Omit<ActorProfile, 'userId'
       JSON.stringify(input.filmography),
       JSON.stringify(input.unavailableDates),
       Number(input.isPublic),
+      input.agency.trim().slice(0, 60),
+      JSON.stringify(documents),
       new Date().toISOString(),
       userId,
     );
   if (input.name) db().prepare('UPDATE users SET name=? WHERE id=?').run(input.name, userId);
-  return getProfile(userId)!;
+  return getProfileFull(userId)!;
 }
 
 export function listFavoriteIds(producerId: string) {

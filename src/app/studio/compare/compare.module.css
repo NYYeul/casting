@@ -1,0 +1,405 @@
+/* 후보 비교(이상형 월드컵) — 라벤더/퍼플 시스템 */
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 8px 24px #5a3ee60d;
+}
+.panelTitle {
+  font-size: 13px;
+  font-weight: 800;
+  margin: 0 0 10px;
+  color: var(--ink);
+}
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 8px 0 12px;
+  text-align: center;
+}
+.notice {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--lavender);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 10px 0;
+}
+
+/* ── 설정 단계 ─────────────────────────────────── */
+.sourceRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.sourceChip {
+  border: 1.5px solid var(--line);
+  background: var(--page);
+  border-radius: 12px;
+  padding: 11px 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s;
+}
+.sourceChip.on {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--lavender);
+}
+.select {
+  width: 100%;
+  border: 1px solid #e5def2;
+  border-radius: 12px;
+  background: var(--page);
+  padding: 12px;
+  color: var(--ink);
+  font-size: 13px;
+  margin-bottom: 12px;
+  outline: none;
+}
+.sizeRow {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.sizeChip {
+  border: 0;
+  background: var(--lavender);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 9px;
+  padding: 6px 10px;
+}
+.candidateList {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.candidateRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.candidateRow:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--lavender);
+}
+.candidateRow input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  flex: none;
+}
+.candidateInfo {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.candidateInfo strong {
+  font-size: 14px;
+}
+.candidateInfo em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+  margin-left: 6px;
+}
+.candidateInfo small {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 사진 ──────────────────────────────────────── */
+.photo {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(160deg, #d9ccff, #a78bfa);
+  display: grid;
+  place-items: center;
+}
+.photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.photoFallback {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+.photoBig {
+  width: 100%;
+  height: 180px;
+  border-radius: 16px 16px 0 0;
+}
+.photoBig .photoFallback {
+  font-size: 34px;
+}
+
+/* ── 대결 단계 ─────────────────────────────────── */
+.arena {
+  margin-top: 4px;
+}
+.progressHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.roundBadge {
+  background: var(--lavender);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  border-radius: 20px;
+  padding: 6px 12px;
+}
+.progressText {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.progressBar {
+  height: 8px;
+  border-radius: 8px;
+  background: var(--lavender);
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+.progressFill {
+  height: 100%;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #a78bfa, var(--primary));
+  transition: width 0.35s ease;
+}
+.duel {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+.duelCard {
+  border: 2px solid var(--line);
+  background: var(--card);
+  border-radius: 18px;
+  padding: 0 0 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  text-align: center;
+  overflow: hidden;
+  box-shadow: 0 8px 24px #5a3ee614;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    opacity 0.18s ease;
+}
+.duelCard:active {
+  transform: scale(0.98);
+}
+.duelCard.picked {
+  border-color: var(--primary);
+  transform: scale(1.03);
+  box-shadow: 0 12px 32px #6c3df445;
+}
+.duelCard:disabled:not(.picked) {
+  opacity: 0.45;
+}
+.duelName {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  margin-top: 8px;
+}
+.duelMeta {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.duelIntro {
+  font-size: 11px;
+  color: var(--faint);
+  padding: 0 10px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.vsBadge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #8b5cf6, var(--primary-deep));
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+  font-style: italic;
+  display: grid;
+  place-items: center;
+  box-shadow:
+    0 0 0 5px #fff,
+    0 10px 24px #5527d866;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ── 우승 화면 ─────────────────────────────────── */
+.finale {
+  text-align: center;
+}
+.crown {
+  font-size: 44px;
+  margin: 6px 0 -8px;
+  filter: drop-shadow(0 6px 12px #f5b62f66);
+}
+.winnerCard {
+  background: linear-gradient(165deg, #ffffff 30%, var(--lavender) 78%, var(--lavender-strong));
+  border: 2px solid var(--lavender-strong);
+  border-radius: 22px;
+  overflow: hidden;
+  padding-bottom: 18px;
+  margin: 0 auto 16px;
+  max-width: 340px;
+  box-shadow: 0 16px 40px #6c3df42b;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.winnerCard .photoBig {
+  height: 220px;
+}
+.winnerName {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.8px;
+  margin-top: 10px;
+}
+.saveRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.saveRow input {
+  border: 1px solid #e5def2;
+  border-radius: 12px;
+  background: var(--page);
+  padding: 12px;
+  font-size: 13px;
+  color: var(--ink);
+  outline: none;
+}
+.actionRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+/* ── 이전 결과 ─────────────────────────────────── */
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.history li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.historyTitle {
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.historyMeta {
+  font-size: 11px;
+  color: var(--muted);
+  flex: none;
+}
+
+/* ── 반응형 ────────────────────────────────────── */
+@media (max-width: 380px) {
+  .duel {
+    grid-template-columns: 1fr;
+  }
+  .vsBadge {
+    width: 44px;
+    height: 44px;
+    font-size: 13px;
+  }
+}
+@media (min-width: 1024px) {
+  .duel {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .arena .progressBar,
+  .arena .progressHead,
+  .arena .hint {
+    max-width: 640px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .candidateList {
+    max-height: 420px;
+  }
+}
