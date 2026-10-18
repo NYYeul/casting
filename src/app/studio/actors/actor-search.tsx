@@ -1,0 +1,334 @@
+'use client';
+
+import Link from 'next/link';
+import { useCallback, useEffect, useState } from 'react';
+import ProducerNav from '@/components/producer-nav';
+import { ageOf, genderLabel, IMAGE_TAGS, REGIONS, SKILLS, type ActorProfile } from '@/lib/profile';
+
+type Result = ActorProfile & { favorite: boolean };
+
+const AGE_RANGES: [string, number, number][] = [
+  ['10대', 10, 19],
+  ['20대', 20, 29],
+  ['30대', 30, 39],
+  ['40대', 40, 49],
+  ['50대 이상', 50, 120],
+];
+
+const EMPTY = {
+  q: '',
+  gender: '',
+  age: '',
+  heightMin: '',
+  heightMax: '',
+  region: '',
+  skill: '',
+  tag: '',
+  available: '',
+  favorites: false,
+  sort: 'recent',
+};
+
+export default function ActorSearch() {
+  const [filters, setFilters] = useState(EMPTY);
+  const [actors, setActors] = useState<Result[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [sheet, setSheet] = useState(false);
+
+  const load = useCallback(async (current: typeof EMPTY) => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    const range = AGE_RANGES.find(([label]) => label === current.age);
+    if (range) {
+      params.set('ageMin', String(range[1]));
+      params.set('ageMax', String(range[2]));
+    }
+    for (const key of [
+      'q',
+      'gender',
+      'heightMin',
+      'heightMax',
+      'region',
+      'skill',
+      'tag',
+      'available',
+      'sort',
+    ] as const)
+      if (current[key]) params.set(key, current[key]);
+    if (current.favorites) params.set('favorites', '1');
+    try {
+      const response = await fetch(`/api/actors?${params}`, { cache: 'no-store' });
+      if (response.status === 401) {
+        location.href = '/login?next=/studio/actors';
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '배우를 불러오지 못했습니다.');
+      setActors(data.actors);
+      setError('');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '배우를 불러오지 못했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => void load(filters), filters.q ? 250 : 0);
+    return () => clearTimeout(timer);
+  }, [filters, load]);
+
+  const set = <K extends keyof typeof EMPTY>(key: K, value: (typeof EMPTY)[K]) =>
+    setFilters((current) => ({ ...current, [key]: value }));
+
+  async function toggleFavorite(actor: Result) {
+    const favorite = !actor.favorite;
+    setActors((current) =>
+      current.map((item) => (item.userId === actor.userId ? { ...item, favorite } : item)),
+    );
+    await fetch('/api/favorites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actorId: actor.userId, favorite }),
+    });
+  }
+
+  const activeCount = (
+    ['gender', 'age', 'heightMin', 'heightMax', 'region', 'skill', 'available'] as const
+  ).filter((key) => filters[key]).length;
+
+  const filterPanel = (
+    <div className="filter-panel">
+      <div className="fp-head">
+        <strong>필터</strong>
+        <button className="text-button" onClick={() => setFilters({ ...EMPTY, q: filters.q })}>
+          초기화
+        </button>
+      </div>
+      <fieldset>
+        <legend>성별</legend>
+        {[
+          ['', '전체'],
+          ['female', '여성'],
+          ['male', '남성'],
+        ].map(([value, label]) => (
+          <label key={value} className="radio">
+            <input
+              type="radio"
+              name="gender"
+              checked={filters.gender === value}
+              onChange={() => set('gender', value)}
+            />
+            {label}
+          </label>
+        ))}
+      </fieldset>
+      <fieldset>
+        <legend>연령대</legend>
+        <label className="radio">
+          <input type="radio" name="age" checked={!filters.age} onChange={() => set('age', '')} />
+          전체
+        </label>
+        {AGE_RANGES.map(([label]) => (
+          <label key={label} className="radio">
+            <input
+              type="radio"
+              name="age"
+              checked={filters.age === label}
+              onChange={() => set('age', label)}
+            />
+            {label}
+          </label>
+        ))}
+      </fieldset>
+      <fieldset>
+        <legend>키 (cm)</legend>
+        <div className="range-row">
+          <input
+            type="number"
+            inputMode="numeric"
+            placeholder="145"
+            value={filters.heightMin}
+            onChange={(event) => set('heightMin', event.target.value)}
+          />
+          <span>~</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            placeholder="190"
+            value={filters.heightMax}
+            onChange={(event) => set('heightMax', event.target.value)}
+          />
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>지역</legend>
+        <select value={filters.region} onChange={(event) => set('region', event.target.value)}>
+          <option value="">전체</option>
+          {REGIONS.map((region) => (
+            <option key={region}>{region}</option>
+          ))}
+        </select>
+      </fieldset>
+      <fieldset>
+        <legend>특기</legend>
+        <select value={filters.skill} onChange={(event) => set('skill', event.target.value)}>
+          <option value="">전체</option>
+          {SKILLS.map((skill) => (
+            <option key={skill}>{skill}</option>
+          ))}
+        </select>
+      </fieldset>
+      <fieldset>
+        <legend>출연 가능 일정</legend>
+        <input
+          type="date"
+          value={filters.available}
+          onChange={(event) => set('available', event.target.value)}
+        />
+        <small>해당 날짜를 불가로 등록한 배우는 제외합니다.</small>
+      </fieldset>
+    </div>
+  );
+
+  return (
+    <main className="app-shell wide">
+      <ProducerNav active="actors" />
+      <div className="screen-pad page-top">
+        <div className="title-row">
+          <div>
+            <p className="greet-sub">조건에 맞는 배우를 찾아보세요</p>
+            <h1 className="page-title">배우 검색</h1>
+          </div>
+          <span className="count-pill">{loading ? '…' : `${actors.length}명`}</span>
+        </div>
+        <div className="search-row">
+          <div className="search-box">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden
+            >
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="m20 20-3.8-3.8" strokeLinecap="round" />
+            </svg>
+            <input
+              aria-label="배우 검색"
+              placeholder="이름, 특기, 소개 검색"
+              value={filters.q}
+              onChange={(event) => set('q', event.target.value)}
+            />
+          </div>
+          <button className="filter-btn mobile-only" onClick={() => setSheet(true)}>
+            필터{activeCount > 0 && <b>{activeCount}</b>}
+          </button>
+          <select
+            className="sort-select"
+            aria-label="정렬"
+            value={filters.sort}
+            onChange={(event) => set('sort', event.target.value)}
+          >
+            <option value="recent">최근 업데이트순</option>
+            <option value="name">이름순</option>
+            <option value="age">나이 어린순</option>
+          </select>
+        </div>
+        <div className="filter-row" role="group" aria-label="이미지 카테고리">
+          <button
+            className={!filters.tag && !filters.favorites ? 'filter active' : 'filter'}
+            onClick={() => setFilters((c) => ({ ...c, tag: '', favorites: false }))}
+          >
+            전체
+          </button>
+          <button
+            className={filters.favorites ? 'filter active' : 'filter'}
+            onClick={() => set('favorites', !filters.favorites)}
+          >
+            ♥ 관심 배우
+          </button>
+          {IMAGE_TAGS.map((tag) => (
+            <button
+              key={tag}
+              className={filters.tag === tag ? 'filter active' : 'filter'}
+              onClick={() => set('tag', filters.tag === tag ? '' : tag)}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+        <div className="search-layout">
+          <aside className="desk-only">{filterPanel}</aside>
+          <section>
+            {error && <p className="form-error">{error}</p>}
+            {!loading && actors.length === 0 ? (
+              <div className="empty-card">
+                조건에 맞는 배우가 없습니다.
+                <br />
+                필터를 조금 넓혀 보세요.
+              </div>
+            ) : (
+              <div className="actor-grid">
+                {actors.map((actor) => (
+                  <div key={actor.userId} className="actor-tile">
+                    <Link href={`/actors/${actor.userId}`} className="tile-photo">
+                      {actor.photos[0] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={actor.photos[0]}
+                          alt={`${actor.name} 프로필 사진`}
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span>{actor.name.slice(-2)}</span>
+                      )}
+                    </Link>
+                    <button
+                      className={`heart${actor.favorite ? ' on' : ''}`}
+                      aria-label={actor.favorite ? '관심 해제' : '관심 저장'}
+                      onClick={() => void toggleFavorite(actor)}
+                    >
+                      {actor.favorite ? '♥' : '♡'}
+                    </button>
+                    <Link href={`/actors/${actor.userId}`} className="tile-info">
+                      <strong>{actor.name}</strong>
+                      <span>
+                        {[
+                          ageOf(actor.birthYear) !== null ? `${ageOf(actor.birthYear)}세` : '',
+                          actor.height ? `${actor.height}cm` : '',
+                          actor.region,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ') || genderLabel[actor.gender]}
+                      </span>
+                      <div className="tag-row">
+                        {actor.tags.slice(0, 2).map((tag) => (
+                          <i key={tag}>{tag}</i>
+                        ))}
+                      </div>
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+      {sheet && (
+        <div className="sheet-backdrop" onClick={() => setSheet(false)}>
+          <section className="detail-sheet" onClick={(event) => event.stopPropagation()}>
+            <div className="sheet-handle" />
+            {filterPanel}
+            <button className="button button-primary full" onClick={() => setSheet(false)}>
+              {actors.length}명 보기
+            </button>
+          </section>
+        </div>
+      )}
+    </main>
+  );
+}

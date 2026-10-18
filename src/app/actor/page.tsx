@@ -1,0 +1,69 @@
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { getActorId } from '@/lib/auth';
+import { listOpenRoles } from '@/lib/db';
+import MyApplications from './my-applications';
+
+export const dynamic = 'force-dynamic';
+
+function shortDate(date: string) {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('ko-KR', {
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
+export default async function ActorHome() {
+  if (await getActorId()) redirect('/me');
+  const roles = listOpenRoles(new Date().toISOString().slice(0, 10));
+  return (
+    <main className="app-shell narrow">
+      <header className="home-header">
+        <Link href="/" className="brand-word" style={{ color: 'inherit' }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <path d="M20.2 5.6 4.9 3.4l.5-1.8a1 1 0 0 1 1.2-.7l14.6 2.2a1 1 0 0 1 .8 1.2l-.4 1.6a1 1 0 0 1-1.4.3Zm.3 2.9H3.5A1.5 1.5 0 0 0 2 10v9a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-9a1.5 1.5 0 0 0-1.5-1.5Z" />
+          </svg>
+          Casting Swipe
+        </Link>
+        <Link href="/" className="text-button">
+          역할 바꾸기
+        </Link>
+      </header>
+      <div className="screen-pad">
+        <p className="greet-sub">안녕하세요, 배우님.</p>
+        <h1 className="page-title">오늘의 오디션</h1>
+        <MyApplications />
+        <div className="section-head">
+          <h2>모집 중인 배역</h2>
+          <span className="muted" style={{ fontSize: 12 }}>
+            {roles.length}개
+          </span>
+        </div>
+        {roles.length === 0 ? (
+          <div className="empty-card">지금 모집 중인 배역이 없습니다.</div>
+        ) : (
+          roles.map((role) => (
+            <Link key={role.id} href={`/apply/${role.slug}`} className="pcard role-link">
+              <div className="pcard-top">
+                <div className="pcard-img" style={{ width: 96, height: 104 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`https://picsum.photos/seed/${role.slug}/200/220`} alt="" />
+                </div>
+                <div className="pcard-info">
+                  <span className="badge-soft">{shortDate(role.deadline)} 마감</span>
+                  <h3>{role.projectTitle}</h3>
+                  <p className="sub">{role.title}</p>
+                  <p className="meta">
+                    촬영 {shortDate(role.shootDate)} · {role.location}
+                    <br />
+                    {role.pay}
+                  </p>
+                </div>
+              </div>
+            </Link>
+          ))
+        )}
+      </div>
+    </main>
+  );
+}

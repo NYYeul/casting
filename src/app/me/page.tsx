@@ -1,0 +1,148 @@
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import ActorNav from '@/components/actor-nav';
+import { getProfile, listActorProposals } from '@/lib/accounts';
+import { getCurrentUser } from '@/lib/auth';
+import { listActorApplications, listOpenRoles } from '@/lib/db';
+import { profileCompletion } from '@/lib/profile';
+import { publicLabels } from '@/lib/types';
+import MyApplications from '../actor/my-applications';
+import ProposalActions from './proposal-actions';
+
+export const dynamic = 'force-dynamic';
+
+function shortDate(date: string) {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('ko-KR', {
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
+export default async function ActorHome() {
+  const user = await getCurrentUser();
+  if (!user) redirect('/login?next=/me');
+  if (user.role !== 'actor') redirect('/studio');
+  const profile = getProfile(user.id);
+  const completion = profile ? profileCompletion(profile) : 0;
+  const proposals = listActorProposals(user.id);
+  const applications = listActorApplications(user.id);
+  const appliedRoleIds = new Set(applications.map((item) => item.roleId));
+  const roles = listOpenRoles(new Date().toISOString().slice(0, 10));
+  return (
+    <main className="app-shell wide">
+      <ActorNav active="home" actorId={user.id} />
+      <div className="screen-pad page-top">
+        <p className="greet-sub">{user.name}님, 안녕하세요.</p>
+        <h1 className="page-title">오늘의 오디션</h1>
+
+        <Link href="/me/profile" className="completion-card">
+          <div>
+            <strong>프로필 완성도 {completion}%</strong>
+            <span>
+              {completion < 100
+                ? '프로필을 채울수록 제작자 검색에 잘 보이고, 지원서가 자동으로 채워져요.'
+                : '프로필이 모두 채워졌어요. 제작자 검색에 노출되고 있습니다.'}
+            </span>
+          </div>
+          <div className="bar">
+            <i style={{ width: `${completion}%` }} />
+          </div>
+        </Link>
+
+        <div className="section-head">
+          <h2>받은 캐스팅 제안</h2>
+          <span className="muted" style={{ fontSize: 12 }}>
+            {proposals.filter((item) => item.status === 'sent').length}건 대기
+          </span>
+        </div>
+        {proposals.length === 0 ? (
+          <div className="empty-card">아직 받은 제안이 없습니다.</div>
+        ) : (
+          proposals.map((proposal) => (
+            <div key={proposal.id} className="proposal-card">
+              <div className="pc-head">
+                <span
+                  className={`status-chip ${proposal.status === 'sent' ? 'chip-new' : proposal.status === 'accepted' ? 'chip-interested' : 'chip-excluded'}`}
+                >
+                  {proposal.status === 'sent'
+                    ? '새 제안'
+                    : proposal.status === 'accepted'
+                      ? '지원 완료'
+                      : '거절함'}
+                </span>
+                <small>
+                  {new Date(proposal.createdAt).toLocaleDateString('ko-KR', {
+                    timeZone: 'Asia/Seoul',
+                  })}
+                </small>
+              </div>
+              <strong>
+                {proposal.projectTitle} · {proposal.roleTitle}
+              </strong>
+              <p className="pc-from">
+                {proposal.producerName}
+                {proposal.orgName ? ` · ${proposal.orgName}` : ''}
+              </p>
+              <p className="pc-msg">{proposal.message}</p>
+              {proposal.status === 'sent' && <ProposalActions proposal={proposal} />}
+            </div>
+          ))
+        )}
+
+        <div className="section-head">
+          <h2>내 지원 현황</h2>
+        </div>
+        {applications.length === 0 ? (
+          <div className="empty-card">아직 지원한 배역이 없습니다.</div>
+        ) : (
+          applications.map((item) => (
+            <Link key={item.id} href={`/status/${item.receiptToken}`} className="audition-card">
+              <span className="icon-tile">✓</span>
+              <span className="txt">
+                {item.projectTitle} · {item.roleTitle}
+                <small>
+                  {publicLabels[item.publicStage]} ·{' '}
+                  {new Date(item.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}{' '}
+                  접수
+                </small>
+              </span>
+              <span className="chevron">›</span>
+            </Link>
+          ))
+        )}
+        <MyApplications />
+
+        <div className="section-head">
+          <h2>모집 중인 배역</h2>
+          <span className="muted" style={{ fontSize: 12 }}>
+            {roles.length}개
+          </span>
+        </div>
+        <div className="role-grid">
+          {roles.map((role) => (
+            <Link key={role.id} href={`/apply/${role.slug}`} className="pcard role-link">
+              <div className="pcard-top">
+                <div className="pcard-img" style={{ width: 96, height: 104 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`https://picsum.photos/seed/${role.slug}/200/220`} alt="" />
+                </div>
+                <div className="pcard-info">
+                  <span className="badge-soft">
+                    {appliedRoleIds.has(role.id) ? '지원함' : `${shortDate(role.deadline)} 마감`}
+                  </span>
+                  <h3>{role.projectTitle}</h3>
+                  <p className="sub">{role.title}</p>
+                  <p className="meta">
+                    촬영 {shortDate(role.shootDate)} · {role.location}
+                    <br />
+                    {role.pay}
+                  </p>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </main>
+  );
+}

@@ -1,0 +1,1431 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Application, Audition, PublicStage, ReviewStatus, Role } from '@/lib/types';
+import { publicLabels, reviewLabels } from '@/lib/types';
+import ChatThread from '@/components/chat-thread';
+import ProducerNav from '@/components/producer-nav';
+
+type Tab = 'home' | 'applicants' | 'messages' | 'profile';
+type Filter = 'all' | 'new' | 'unknown' | 'interested' | 'hold' | 'shortlist';
+type Sort = 'newest' | 'oldest' | 'name';
+
+async function api<T>(url: string, options?: RequestInit): Promise<T> {
+  if (!navigator.onLine) throw new Error('연결이 끊겼습니다. 다시 연결한 뒤 시도해 주세요.');
+  const response = await fetch(url, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    cache: 'no-store',
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || '요청을 완료하지 못했습니다.');
+  return data as T;
+}
+
+const Icon = {
+  clapper: (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M20.2 5.6 4.9 3.4l.5-1.8a1 1 0 0 1 1.2-.7l14.6 2.2a1 1 0 0 1 .8 1.2l-.4 1.6a1 1 0 0 1-1.4.3Zm.3 2.9H3.5A1.5 1.5 0 0 0 2 10v9a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-9a1.5 1.5 0 0 0-1.5-1.5ZM4 20v-8.5h16V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1 1Z" />
+    </svg>
+  ),
+  bell: (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      <path
+        d="M18 8a6 6 0 1 0-12 0c0 7-3 7.5-3 9.5h18c0-2-3-2.5-3-9.5Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M10 20.5a2 2 0 0 0 4 0" strokeLinecap="round" />
+    </svg>
+  ),
+  folder: (
+    <svg
+      width="21"
+      height="21"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      <path
+        d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  users: (
+    <svg
+      width="21"
+      height="21"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3.5 19.5c.6-3.2 2.9-5 5.5-5s4.9 1.8 5.5 5" strokeLinecap="round" />
+      <path d="M15.5 5.5a3.2 3.2 0 0 1 0 5.6M17.8 14.9c1.6.6 2.6 2 3 4" strokeLinecap="round" />
+    </svg>
+  ),
+  chat: (
+    <svg
+      width="21"
+      height="21"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      <path d="M21 12a8 8 0 0 1-8 8H4l1.5-3A8 8 0 1 1 21 12Z" strokeLinejoin="round" />
+    </svg>
+  ),
+  user: (
+    <svg
+      width="21"
+      height="21"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      <circle cx="12" cy="8" r="3.6" />
+      <path d="M5 20c.8-3.8 3.7-6 7-6s6.2 2.2 7 6" strokeLinecap="round" />
+    </svg>
+  ),
+  calendar: (
+    <svg
+      width="19"
+      height="19"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      <rect x="3.5" y="5" width="17" height="16" rx="3" />
+      <path d="M8 3v4M16 3v4M3.5 10h17" strokeLinecap="round" />
+    </svg>
+  ),
+  pin: (
+    <svg
+      width="19"
+      height="19"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      <path
+        d="M12 21s-6.5-5.4-6.5-10.5a6.5 6.5 0 1 1 13 0C18.5 15.6 12 21 12 21Z"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="10.3" r="2.2" />
+    </svg>
+  ),
+  doc: (
+    <svg
+      width="19"
+      height="19"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      <path d="M6 3h8l4 4v14H6V3Z" strokeLinejoin="round" />
+      <path d="M14 3v4h4M9 12h6M9 16h6" strokeLinecap="round" />
+    </svg>
+  ),
+  upload: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden
+    >
+      <path d="M12 16V4m0 0L7 9m5-5 5 5M4 20h16" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  search: (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden
+    >
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m20 20-3.8-3.8" strokeLinecap="round" />
+    </svg>
+  ),
+  plus: (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      aria-hidden
+    >
+      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+    </svg>
+  ),
+  out: (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden
+    >
+      <path
+        d="M14 4h5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-5M10 8l-4 4 4 4M6 12h10"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+};
+
+function initials(name: string) {
+  return name.slice(-2);
+}
+function conditionLabel(value: string) {
+  return value === 'yes' ? '가능' : value === 'no' ? '불가' : '미확인';
+}
+function formattedDate(date: string) {
+  return date
+    ? new Date(`${date}T00:00:00`).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
+    : '';
+}
+function slotLabel(slot: string) {
+  const date = new Date(`${slot}:00+09:00`);
+  if (Number.isNaN(date.valueOf())) return slot;
+  const day = date.toLocaleDateString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: 'numeric',
+    day: 'numeric',
+  });
+  const dow = date.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', weekday: 'short' });
+  const time = date.toLocaleTimeString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return `${day} (${dow}) ${time}`;
+}
+function chatTimeLabel(iso: string) {
+  const now = new Date();
+  const date = new Date(iso);
+  const sameDay = (d: Date) =>
+    d.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }) ===
+    now.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+  const yesterday = new Date(now.getTime() - 86_400_000);
+  if (sameDay(date))
+    return date.toLocaleTimeString('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: false,
+    });
+  if (
+    date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }) ===
+    yesterday.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' })
+  )
+    return '어제';
+  return date.toLocaleDateString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: 'numeric',
+    day: 'numeric',
+  });
+}
+
+function Avatar({
+  name,
+  photoUrl,
+  className,
+}: {
+  name: string;
+  photoUrl?: string;
+  className: string;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+  return (
+    <div className={className}>
+      {photoUrl && !imageFailed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={photoUrl} alt={`${name} 프로필 사진`} onError={() => setImageFailed(true)} />
+      ) : (
+        initials(name)
+      )}
+    </div>
+  );
+}
+
+type ProjectGroup = {
+  title: string;
+  roles: Role[];
+  applications: number;
+  newCount: number;
+  shortlistCount: number;
+  closed: boolean;
+};
+
+export default function Studio({
+  initialTab,
+  userName,
+  orgName,
+  email,
+}: {
+  initialTab: Tab;
+  userName: string;
+  orgName: string;
+  email: string;
+}) {
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [roleId, setRoleId] = useState('');
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [recent, setRecent] = useState<Application[]>([]);
+  const [auditions, setAuditions] = useState<Audition[]>([]);
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [sort, setSort] = useState<Sort>('newest');
+  const [search, setSearch] = useState('');
+  const [msgSearch, setMsgSearch] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [chatId, setChatId] = useState<string | null>(null);
+  const [auth, setAuth] = useState<'loading' | 'error' | 'ready'>('loading');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [online, setOnline] = useState(true);
+  const [note, setNote] = useState('');
+  const [pendingPublicStage, setPendingPublicStage] = useState<PublicStage | null>(null);
+
+  const role = roles.find((item) => item.id === roleId);
+  const selected = applications.find((item) => item.id === selectedId);
+  const chatTarget =
+    applications.find((item) => item.id === chatId) || recent.find((item) => item.id === chatId);
+
+  const loadRoles = useCallback(async () => {
+    try {
+      const result = await api<{ roles: Role[] }>('/api/roles');
+      setRoles(result.roles);
+      setRoleId((current) => current || result.roles[0]?.id || '');
+      setAuth('ready');
+    } catch (error) {
+      if (String(error).includes('인증')) {
+        location.href = '/login?next=/studio';
+        return;
+      }
+      setAuth('error');
+      setMessage(error instanceof Error ? error.message : '제작자 화면을 열지 못했습니다.');
+    }
+  }, []);
+
+  const loadApplications = useCallback(async (id: string) => {
+    if (!id) {
+      setApplications([]);
+      return;
+    }
+    try {
+      const result = await api<{ applications: Application[] }>(
+        `/api/applications?roleId=${encodeURIComponent(id)}`,
+      );
+      setApplications(result.applications);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '목록을 불러오지 못했습니다.');
+    }
+  }, []);
+
+  const loadExtras = useCallback(async () => {
+    try {
+      const [recentResult, auditionResult] = await Promise.all([
+        api<{ applications: Application[] }>('/api/applications'),
+        api<{ auditions: Audition[] }>('/api/auditions'),
+      ]);
+      setRecent(recentResult.applications);
+      setAuditions(auditionResult.auditions);
+    } catch {
+      /* 홈 보조 정보는 실패해도 핵심 화면을 막지 않는다 */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRoles();
+  }, [loadRoles]);
+  useEffect(() => {
+    if (auth === 'ready') {
+      void loadApplications(roleId);
+      void loadExtras();
+    }
+  }, [auth, roleId, loadApplications, loadExtras]);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    update();
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
+  useEffect(() => {
+    setNote(selected?.note || '');
+    setPendingPublicStage(null);
+  }, [selectedId, selected?.note]);
+
+  async function updateApplication(id: string, patch: Partial<Application>) {
+    setBusy(true);
+    setMessage('');
+    try {
+      const result = await api<{ application: Application }>(`/api/applications/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      });
+      setApplications((current) =>
+        current.map((item) => (item.id === id ? { ...item, ...result.application } : item)),
+      );
+      setMessage('저장했습니다.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '저장하지 못했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveRole(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage('');
+    const form = new FormData(event.currentTarget);
+    const body = Object.fromEntries(form.entries());
+    try {
+      const result = await api<{ role: Role }>(
+        editingRole ? `/api/roles/${editingRole.id}` : '/api/roles',
+        {
+          method: editingRole ? 'PATCH' : 'POST',
+          body: JSON.stringify(body),
+        },
+      );
+      setRoles((current) =>
+        editingRole
+          ? current.map((item) => (item.id === editingRole.id ? result.role : item))
+          : [result.role, ...current],
+      );
+      setRoleId(result.role.id);
+      if (!editingRole) setApplications([]);
+      setCreateOpen(false);
+      setEditingRole(null);
+      setTab('applicants');
+      setMessage(
+        editingRole
+          ? '배역 정보를 수정했습니다.'
+          : '배역이 게시되었습니다. 지원 링크를 공유해 보세요.',
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '배역을 저장하지 못했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleClosed(target: Role) {
+    setBusy(true);
+    setMessage('');
+    try {
+      const result = await api<{ role: Role }>(`/api/roles/${target.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isClosed: !target.isClosed }),
+      });
+      setRoles((current) => current.map((item) => (item.id === target.id ? result.role : item)));
+      setMessage(
+        result.role.isClosed ? '지원 접수를 마감했습니다.' : '지원 접수를 다시 열었습니다.',
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '변경하지 못했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function shareRole(target: Role) {
+    const url = `${location.origin}/apply/${target.slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setMessage('지원 링크를 복사했습니다.');
+    } catch {
+      setMessage(url);
+    }
+  }
+
+  const projects = useMemo<ProjectGroup[]>(() => {
+    const groups = new Map<string, ProjectGroup>();
+    for (const item of roles) {
+      const group =
+        groups.get(item.projectTitle) ||
+        ({
+          title: item.projectTitle,
+          roles: [],
+          applications: 0,
+          newCount: 0,
+          shortlistCount: 0,
+          closed: true,
+        } satisfies ProjectGroup);
+      group.roles.push(item);
+      group.applications += item.applicationCount || 0;
+      group.newCount += item.newCount || 0;
+      group.shortlistCount += item.shortlistCount || 0;
+      if (!item.isClosed) group.closed = false;
+      groups.set(item.projectTitle, group);
+    }
+    return [...groups.values()];
+  }, [roles]);
+
+  const filtered = useMemo(() => {
+    const matches = applications.filter((item) => {
+      if (filter === 'shortlist' && !item.shortlist) return false;
+      if (filter === 'new' && item.status !== 'new') return false;
+      if (
+        filter === 'unknown' &&
+        item.available !== 'unsure' &&
+        item.travel !== 'unsure' &&
+        item.payAccepted !== 'unsure'
+      )
+        return false;
+      if (filter === 'interested' && item.status !== 'interested') return false;
+      if (filter === 'hold' && item.status !== 'hold') return false;
+      return (
+        !search || `${item.name} ${item.introduction}`.toLowerCase().includes(search.toLowerCase())
+      );
+    });
+    return matches.sort((a, b) =>
+      sort === 'name'
+        ? a.name.localeCompare(b.name, 'ko')
+        : sort === 'oldest'
+          ? a.createdAt.localeCompare(b.createdAt)
+          : b.createdAt.localeCompare(a.createdAt),
+    );
+  }, [applications, filter, search, sort]);
+
+  const threads = useMemo(() => {
+    const open = applications.filter(
+      (item) =>
+        (item.chatOpen || item.lastMessageAt) &&
+        (!msgSearch || item.name.toLowerCase().includes(msgSearch.toLowerCase())),
+    );
+    return open.sort((a, b) =>
+      (b.lastMessageAt || b.createdAt).localeCompare(a.lastMessageAt || a.createdAt),
+    );
+  }, [applications, msgSearch]);
+
+  const newContacts = useMemo(
+    () =>
+      applications.filter(
+        (item) =>
+          !item.chatOpen &&
+          !item.lastMessageAt &&
+          (!msgSearch || item.name.toLowerCase().includes(msgSearch.toLowerCase())),
+      ),
+    [applications, msgSearch],
+  );
+
+  const unreadTotal = applications.reduce((sum, item) => sum + (item.unreadCount || 0), 0);
+
+  if (auth === 'loading')
+    return (
+      <main className="app-shell center-screen">
+        <div className="loading-mark">CS</div>
+        <p>캐스팅 화면을 여는 중…</p>
+      </main>
+    );
+  if (auth === 'error')
+    return (
+      <main className="app-shell narrow center-screen">
+        <div className="login-panel">
+          <div className="brand-mark">CS</div>
+          <h1>화면을 열지 못했습니다</h1>
+          <p className="form-error" role="alert">
+            {message}
+          </p>
+          <button className="button button-primary full" onClick={() => void loadRoles()}>
+            다시 시도
+          </button>
+          <a className="link-center" href="/">
+            처음으로
+          </a>
+        </div>
+      </main>
+    );
+
+  return (
+    <main className="app-shell wide">
+      {!online && (
+        <div className="offline-banner" role="status">
+          인터넷 연결이 끊겼습니다. 변경 사항을 저장할 수 없습니다.
+        </div>
+      )}
+      <header className="home-header">
+        <div className="brand-word mobile-only">
+          {Icon.clapper}
+          Casting Swipe
+        </div>
+        <span className="desk-only" />
+        <button
+          className="bell-btn"
+          aria-label="알림"
+          onClick={() =>
+            setMessage(
+              unreadTotal > 0
+                ? `읽지 않은 메시지 ${unreadTotal}건이 있습니다.`
+                : '새로운 알림이 없습니다.',
+            )
+          }
+        >
+          {Icon.bell}
+          {unreadTotal > 0 && <span className="dot" />}
+        </button>
+      </header>
+      <div className="screen-pad">
+        {tab === 'home' && (
+          <>
+            <p className="greet-sub">{userName}님, 안녕하세요.</p>
+            <h1 className="page-title">오늘의 캐스팅</h1>
+            <div className="section-head" style={{ marginTop: 0 }}>
+              <h2>진행 중인 프로젝트</h2>
+              <button onClick={() => setTab('applicants')}>전체 보기 ›</button>
+            </div>
+            {projects.length === 0 ? (
+              <div className="empty-card">
+                첫 배역을 만들고
+                <br />
+                지원 링크를 공고에 붙여 보세요.
+              </div>
+            ) : (
+              projects.map((project) => {
+                const first = project.roles[0];
+                const dates = project.roles.map((item) => item.shootDate).sort();
+                const range =
+                  dates[0] === dates[dates.length - 1]
+                    ? formattedDate(dates[0])
+                    : `${formattedDate(dates[0])} – ${formattedDate(dates[dates.length - 1])}`;
+                return (
+                  <section className="pcard" key={project.title}>
+                    <div className="pcard-top">
+                      <div className="pcard-img">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={`https://picsum.photos/seed/${first.slug}/240/264`}
+                          alt=""
+                          loading="lazy"
+                        />
+                      </div>
+                      <div className="pcard-info">
+                        <span className={`badge-soft${project.closed ? ' state-off' : ''}`}>
+                          {project.closed ? '마감' : '모집 중'} · 배역 {project.roles.length}개
+                        </span>
+                        <h3>{project.title}</h3>
+                        <p className="sub">{project.roles.map((item) => item.title).join(' · ')}</p>
+                        <p className="meta">
+                          촬영 {range} · {first.location}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="pcard-stats">
+                      <div>
+                        <span>지원자</span>
+                        <strong>{project.applications}</strong>
+                      </div>
+                      <div>
+                        <span>검토 필요</span>
+                        <strong className="accent">{project.newCount}</strong>
+                      </div>
+                      <div>
+                        <span>오디션 후보</span>
+                        <strong>{project.shortlistCount}</strong>
+                      </div>
+                    </div>
+                    <button
+                      className="button button-primary full"
+                      onClick={() => {
+                        setRoleId(first.id);
+                        setTab('applicants');
+                        setFilter('all');
+                      }}
+                    >
+                      지원자 검토하기 ›
+                    </button>
+                    <button className="share-row" onClick={() => void shareRole(first)}>
+                      {Icon.upload} 지원 링크 공유
+                    </button>
+                  </section>
+                );
+              })
+            )}
+            <div className="split-actions">
+              <a className="button button-primary" href="/studio/projects/new">
+                {Icon.plus} 프로젝트 등록
+              </a>
+              <button
+                className="button button-soft"
+                onClick={() => {
+                  setEditingRole(null);
+                  setCreateOpen(true);
+                }}
+              >
+                {Icon.plus} 배역만 빠르게 추가
+              </button>
+            </div>
+            <div className="section-head">
+              <h2>새로 지원한 배우</h2>
+              <button onClick={() => setTab('applicants')}>전체 보기 ›</button>
+            </div>
+            {recent.length === 0 ? (
+              <div className="empty-card">아직 지원자가 없습니다.</div>
+            ) : (
+              <div className="actor-strip">
+                {recent.map((item) => (
+                  <button
+                    key={item.id}
+                    className="actor-card"
+                    onClick={() => {
+                      setRoleId(item.roleId);
+                      setSelectedId(item.id);
+                    }}
+                  >
+                    <div className="photo">
+                      {item.photoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.photoUrl} alt={item.name} loading="lazy" />
+                      ) : (
+                        initials(item.name)
+                      )}
+                    </div>
+                    <strong>{item.name}</strong>
+                    <span>{item.roleTitle || '배역'}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="section-head">
+              <h2>다가오는 오디션</h2>
+            </div>
+            {auditions.length === 0 ? (
+              <div className="empty-card">확정된 오디션 일정이 없습니다.</div>
+            ) : (
+              auditions.map((item) => (
+                <button
+                  key={item.applicationId}
+                  className="audition-card"
+                  onClick={() => {
+                    setRoleId(item.roleId);
+                    setChatId(item.applicationId);
+                  }}
+                >
+                  <span className="icon-tile">{Icon.calendar}</span>
+                  <span className="txt">
+                    {slotLabel(item.slot)} · {item.name}
+                    <small>
+                      {item.projectTitle} · {item.roleTitle} · {item.place}
+                    </small>
+                  </span>
+                  <span className="chevron">›</span>
+                </button>
+              ))
+            )}
+          </>
+        )}
+
+        {tab === 'applicants' && (
+          <>
+            <p className="greet-sub">배역별 지원자를 한곳에서</p>
+            <h1 className="page-title">지원자</h1>
+            {role ? (
+              <>
+                <div className="role-pick">
+                  {Icon.clapper}
+                  <select
+                    aria-label="배역 선택"
+                    value={roleId}
+                    onChange={(event) => {
+                      setRoleId(event.target.value);
+                      setFilter('all');
+                      setSelectedId(null);
+                    }}
+                  >
+                    {roles.map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.projectTitle} · {item.title}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="chevron" style={{ fontSize: 14 }}>
+                    ⌄
+                  </span>
+                </div>
+                <div className="role-banner" style={{ marginTop: 10 }}>
+                  <div className="rb-top">
+                    <div className="t">
+                      <strong>
+                        {role.title} <small>{role.isClosed ? '· 지원 마감' : '· 접수 중'}</small>
+                      </strong>
+                      <span>
+                        촬영 {formattedDate(role.shootDate)} · {role.location} ·{' '}
+                        {formattedDate(role.deadline)} 마감
+                      </span>
+                    </div>
+                    <span className={`status-chip ${role.isClosed ? '' : 'chip-new'}`}>
+                      {role.isClosed ? '마감' : '모집 중'}
+                    </span>
+                  </div>
+                  <div className="rb-actions">
+                    <button onClick={() => void shareRole(role)}>지원 링크 복사</button>
+                    <button onClick={() => window.open(`/apply/${role.slug}`, '_blank')}>
+                      지원 화면 보기
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingRole(role);
+                        setCreateOpen(true);
+                      }}
+                    >
+                      정보 수정
+                    </button>
+                    <button onClick={() => void toggleClosed(role)} disabled={busy}>
+                      {role.isClosed ? '다시 열기' : '접수 마감'}
+                    </button>
+                  </div>
+                </div>
+                <section className="stats-grid">
+                  <div>
+                    <strong>{applications.length}</strong>
+                    <span>전체 지원</span>
+                  </div>
+                  <div>
+                    <strong className="accent">
+                      {applications.filter((item) => item.status === 'new').length}
+                    </strong>
+                    <span>미검토</span>
+                  </div>
+                  <div>
+                    <strong>{applications.filter((item) => item.shortlist).length}</strong>
+                    <span>오디션 후보</span>
+                  </div>
+                </section>
+                <section>
+                  <div className="section-head" style={{ marginTop: 22 }}>
+                    <h2>{filter === 'shortlist' ? '오디션 후보' : '지원자 목록'}</h2>
+                    <div className="list-tools">
+                      <button
+                        className="sort-label"
+                        onClick={() => {
+                          setFilter('all');
+                          setSearch('');
+                          setSort('newest');
+                        }}
+                      >
+                        초기화
+                      </button>
+                      <select
+                        aria-label="지원자 정렬"
+                        value={sort}
+                        onChange={(event) => setSort(event.target.value as Sort)}
+                      >
+                        <option value="newest">최신순</option>
+                        <option value="oldest">오래된순</option>
+                        <option value="name">이름순</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="search-box">
+                    {Icon.search}
+                    <input
+                      aria-label="지원자 검색"
+                      placeholder="이름 또는 소개 검색"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                    />
+                  </div>
+                  <div className="filter-row" role="group" aria-label="지원자 필터">
+                    {(
+                      [
+                        ['all', '전체'],
+                        ['new', '미검토'],
+                        ['unknown', '조건 미확인'],
+                        ['interested', '관심'],
+                        ['hold', '보류'],
+                        ['shortlist', '후보'],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        className={filter === value ? 'filter active' : 'filter'}
+                        onClick={() => setFilter(value)}
+                      >
+                        {label}
+                        {value === 'new' && (
+                          <b>{applications.filter((item) => item.status === 'new').length}</b>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  {filtered.length === 0 ? (
+                    <div className="empty-card">
+                      {filter === 'shortlist'
+                        ? '아직 저장된 후보가 없습니다.'
+                        : '이 조건의 지원자가 없습니다.'}
+                    </div>
+                  ) : (
+                    <div className="candidate-list">
+                      {filtered.map((item) => (
+                        <button
+                          key={item.id}
+                          className="candidate-row"
+                          onClick={() => setSelectedId(item.id)}
+                        >
+                          <Avatar name={item.name} photoUrl={item.photoUrl} className="avatar sq" />
+                          <div className="candidate-main">
+                            <div className="candidate-head">
+                              <strong>
+                                {item.name} <small>{item.age ? `(${item.age})` : ''}</small>
+                              </strong>
+                              <span className={`status-chip chip-${item.status}`}>
+                                {reviewLabels[item.status]}
+                              </span>
+                            </div>
+                            <p>{item.introduction}</p>
+                            <div className="candidate-meta">
+                              <span className={item.available === 'yes' ? 'positive' : 'uncertain'}>
+                                {item.available === 'yes' ? '●' : '◷'} 촬영{' '}
+                                {conditionLabel(item.available)}
+                              </span>
+                              <span>▣ {item.videoUrl ? '영상 있음' : '영상 없음'}</span>
+                              {item.shortlist && <span className="positive">★ 후보</span>}
+                            </div>
+                          </div>
+                          <span className="chevron">›</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </>
+            ) : (
+              <div className="empty-card">
+                새 배역을 만들고
+                <br />첫 지원을 받아보세요.
+              </div>
+            )}
+          </>
+        )}
+
+        {tab === 'messages' && (
+          <>
+            <h1 className="page-title" style={{ marginTop: 14 }}>
+              메시지
+            </h1>
+            <div className="role-pick">
+              {Icon.clapper}
+              <select
+                aria-label="프로젝트 선택"
+                value={roleId}
+                onChange={(event) => setRoleId(event.target.value)}
+              >
+                {roles.map((item) => (
+                  <option value={item.id} key={item.id}>
+                    {item.projectTitle} · {item.title}
+                  </option>
+                ))}
+              </select>
+              <span className="chevron" style={{ fontSize: 14 }}>
+                ⌄
+              </span>
+            </div>
+            <div className="search-box" style={{ marginTop: 12 }}>
+              {Icon.search}
+              <input
+                aria-label="배우 또는 대화 검색"
+                placeholder="배우 또는 대화 검색"
+                value={msgSearch}
+                onChange={(event) => setMsgSearch(event.target.value)}
+              />
+            </div>
+            {newContacts.length > 0 && (
+              <>
+                <div className="section-head">
+                  <h2>새로운 연락</h2>
+                </div>
+                <div className="actor-strip">
+                  {newContacts.map((item) => (
+                    <button
+                      key={item.id}
+                      className="new-contact"
+                      onClick={() => setChatId(item.id)}
+                    >
+                      <Avatar name={item.name} photoUrl={item.photoUrl} className="avatar" />
+                      <span>{item.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            <div className="section-head">
+              <h2>대화</h2>
+              <span className="muted" style={{ fontSize: 11 }}>
+                최신순
+              </span>
+            </div>
+            {threads.length === 0 ? (
+              <div className="empty-card">
+                지원자가 접수되면
+                <br />
+                여기에서 연락을 시작할 수 있습니다.
+              </div>
+            ) : (
+              <div className="thread-list">
+                {threads.map((item) => (
+                  <button key={item.id} className="thread-row" onClick={() => setChatId(item.id)}>
+                    <Avatar name={item.name} photoUrl={item.photoUrl} className="avatar" />
+                    <div className="thread-main">
+                      <div className="thread-name">
+                        <strong>{item.name}</strong>
+                        {item.offerStatus && item.offerStatus !== 'confirmed' && (
+                          <span className="thread-badge">오디션 조율</span>
+                        )}
+                        {item.offerStatus === 'confirmed' && (
+                          <span className="thread-badge done">오디션 확정</span>
+                        )}
+                      </div>
+                      <p>{item.lastMessage || '대화를 시작해 보세요.'}</p>
+                    </div>
+                    <div className="thread-side">
+                      <time>{chatTimeLabel(item.lastMessageAt || item.updatedAt)}</time>
+                      {(item.unreadCount || 0) > 0 && (
+                        <span className="unread-dot">{item.unreadCount}</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {tab === 'profile' && (
+          <>
+            <h1 className="page-title" style={{ marginTop: 14 }}>
+              내 정보
+            </h1>
+            <div className="profile-card">
+              <div className="avatar">{userName.slice(-2)}</div>
+              <div>
+                <strong>{userName}</strong>
+                <span>
+                  {orgName ? `${orgName} · ` : ''}
+                  {email}
+                </span>
+              </div>
+            </div>
+            <div className="menu-list">
+              <a href="/studio/projects/new">{Icon.folder} 프로젝트 등록</a>
+              <a href="/studio/actors">{Icon.search} 배우 찾기</a>
+              <button
+                onClick={() => {
+                  setEditingRole(null);
+                  setCreateOpen(true);
+                }}
+              >
+                {Icon.plus} 새 배역 만들기
+              </button>
+              <button onClick={() => role && void shareRole(role)} disabled={!role}>
+                {Icon.upload} 지원 링크 공유
+              </button>
+              <button
+                onClick={async () => {
+                  await api('/api/auth', { method: 'DELETE' });
+                  location.href = '/';
+                }}
+              >
+                {Icon.out} 로그아웃
+              </button>
+            </div>
+            <p className="version-note">캐스팅 스와이프 MVP 0.2</p>
+          </>
+        )}
+      </div>
+
+      <ProducerNav
+        active={tab}
+        onTab={(next) => {
+          setTab(next);
+          history.replaceState(null, '', next === 'home' ? '/studio' : `/studio?tab=${next}`);
+        }}
+        badge={{ messages: unreadTotal > 0 }}
+      />
+
+      {message && (
+        <div className="toast" role="status" onClick={() => setMessage('')}>
+          {message}
+          <button aria-label="닫기">×</button>
+        </div>
+      )}
+
+      {selected && (
+        <div className="sheet-backdrop" onClick={() => setSelectedId(null)}>
+          <section
+            className="detail-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${selected.name} 지원서`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sheet-handle" />
+            <div className="sheet-title">
+              <span>지원자 상세</span>
+              <button onClick={() => setSelectedId(null)} aria-label="닫기">
+                ×
+              </button>
+            </div>
+            <div className="detail-profile">
+              <Avatar
+                name={selected.name}
+                photoUrl={selected.photoUrl}
+                className="avatar avatar-large"
+              />
+              <div>
+                <h2>
+                  {selected.name} <small>{selected.age ? `(${selected.age})` : ''}</small>
+                </h2>
+                <p>{selected.introduction}</p>
+                <span>
+                  지원일{' '}
+                  {new Date(selected.createdAt).toLocaleDateString('ko-KR', {
+                    timeZone: 'Asia/Seoul',
+                  })}
+                </span>
+              </div>
+            </div>
+            <div className="detail-grid">
+              <div>
+                <span>촬영 가능</span>
+                <strong className={selected.available === 'yes' ? 'positive' : 'uncertain'}>
+                  {conditionLabel(selected.available)}
+                </strong>
+              </div>
+              <div>
+                <span>지역 이동</span>
+                <strong>{conditionLabel(selected.travel)}</strong>
+              </div>
+              <div>
+                <span>출연료 수용</span>
+                <strong>{conditionLabel(selected.payAccepted)}</strong>
+              </div>
+            </div>
+            <div className="detail-block">
+              <h3>자료와 연락처</h3>
+              <p>필수 역량: {selected.skill || '미입력'}</p>
+              <p>
+                연락처: {selected.phone} · {selected.email}
+              </p>
+              {selected.photoUrl && (
+                <a href={selected.photoUrl} target="_blank" rel="noreferrer">
+                  사진 열기 ↗
+                </a>
+              )}
+              {selected.videoUrl && (
+                <a href={selected.videoUrl} target="_blank" rel="noreferrer">
+                  연기 영상 열기 ↗
+                </a>
+              )}
+            </div>
+            <div className="detail-block">
+              <h3>내부 검토</h3>
+              <div className="review-buttons">
+                {(
+                  [
+                    ['excluded', '제외'],
+                    ['hold', '보류'],
+                    ['interested', '관심 있음'],
+                  ] as [ReviewStatus, string][]
+                ).map(([status, label]) => (
+                  <button
+                    key={status}
+                    disabled={busy}
+                    className={selected.status === status ? 'selected' : ''}
+                    onClick={() => void updateApplication(selected.id, { status })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <label className="field-label" htmlFor="review-note">
+                팀 내부 메모
+              </label>
+              <textarea
+                id="review-note"
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                rows={3}
+                placeholder="공개되지 않는 메모입니다"
+              />
+              <button
+                className="text-button"
+                disabled={busy || note === selected.note}
+                onClick={() => void updateApplication(selected.id, { note })}
+              >
+                메모 저장
+              </button>
+            </div>
+            <div className="detail-block public-block">
+              <h3>배우에게 공개할 결과</h3>
+              <p>선택 후 저장하면 접수 현황 페이지에 표시됩니다.</p>
+              <select
+                aria-label="배우 공개 상태"
+                value={pendingPublicStage ?? selected.publicStage}
+                onChange={(event) => setPendingPublicStage(event.target.value as PublicStage)}
+              >
+                <option value="received">접수 완료</option>
+                <option value="audition">오디션 대상</option>
+                <option value="not_selected">미선정</option>
+                <option value="cast">캐스팅 확정</option>
+              </select>
+              {pendingPublicStage && pendingPublicStage !== selected.publicStage && (
+                <div className="public-confirm">
+                  <p>
+                    <strong>{publicLabels[pendingPublicStage]}</strong> 상태를 배우의 현황 페이지에
+                    공개합니다.
+                  </p>
+                  <button
+                    className="button button-primary"
+                    disabled={busy}
+                    onClick={() => {
+                      void updateApplication(selected.id, { publicStage: pendingPublicStage });
+                      setPendingPublicStage(null);
+                    }}
+                  >
+                    결과 공개
+                  </button>
+                  <button
+                    className="button button-outline"
+                    onClick={() => setPendingPublicStage(null)}
+                  >
+                    취소
+                  </button>
+                </div>
+              )}
+            </div>
+            <button
+              className="button button-outline full"
+              style={{ marginBottom: 9 }}
+              onClick={() => {
+                setChatId(selected.id);
+                setSelectedId(null);
+              }}
+            >
+              연락하기 · 오디션 일정 제안
+            </button>
+            <button
+              className={
+                selected.shortlist ? 'button button-outline full' : 'button button-primary full'
+              }
+              disabled={busy}
+              onClick={() =>
+                void updateApplication(selected.id, {
+                  shortlist: !selected.shortlist,
+                  status: !selected.shortlist ? 'interested' : selected.status,
+                })
+              }
+            >
+              {selected.shortlist ? '후보 목록에서 제거' : '☆ 오디션 후보에 추가'}
+            </button>
+          </section>
+        </div>
+      )}
+
+      {chatId && (
+        <div
+          className="sheet-backdrop"
+          onClick={() => {
+            setChatId(null);
+            void loadApplications(roleId);
+            void loadExtras();
+          }}
+        >
+          <section
+            className="detail-sheet chat-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="지원자 대화"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sheet-handle" />
+            {chatTarget && (
+              <ChatThread
+                applicationId={chatId}
+                mode="producer"
+                peerName={chatTarget.name}
+                peerPhoto={chatTarget.photoUrl}
+                peerSub={`${role?.projectTitle || ''} · ${role?.title || ''}`}
+                projectTitle={role?.projectTitle || ''}
+                roleTitle={role?.title || ''}
+                projectImage={`https://picsum.photos/seed/${role?.slug}/96/96`}
+                onViewProfile={() => {
+                  setSelectedId(chatId);
+                  setChatId(null);
+                }}
+                onClose={() => {
+                  setChatId(null);
+                  void loadApplications(roleId);
+                  void loadExtras();
+                }}
+              />
+            )}
+          </section>
+        </div>
+      )}
+
+      {createOpen && (
+        <div className="sheet-backdrop" onClick={() => setCreateOpen(false)}>
+          <section
+            className="detail-sheet create-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="새 배역 만들기"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sheet-handle" />
+            <div className="sheet-title">
+              <span>{editingRole ? '배역 정보 수정' : '새 배역 만들기'}</span>
+              <button onClick={() => setCreateOpen(false)} aria-label="닫기">
+                ×
+              </button>
+            </div>
+            <p className="muted">공유 전에 배우가 알아야 할 조건을 먼저 적어 주세요.</p>
+            <form key={editingRole?.id || 'new'} onSubmit={saveRole} className="role-form">
+              <label>
+                프로젝트명
+                <input
+                  name="projectTitle"
+                  required
+                  defaultValue={editingRole?.projectTitle}
+                  placeholder="예: 단편영화 〈봄날〉"
+                />
+              </label>
+              <label>
+                배역명
+                <input
+                  name="title"
+                  required
+                  defaultValue={editingRole?.title}
+                  placeholder="예: 민수 역"
+                />
+              </label>
+              <label>
+                배역 설명
+                <textarea
+                  name="description"
+                  required
+                  rows={3}
+                  defaultValue={editingRole?.description}
+                  placeholder="인물과 필요한 연기를 설명해 주세요"
+                />
+              </label>
+              <div className="form-two">
+                <label>
+                  촬영일
+                  <input
+                    name="shootDate"
+                    type="date"
+                    required
+                    defaultValue={editingRole?.shootDate}
+                  />
+                </label>
+                <label>
+                  지원 마감
+                  <input
+                    name="deadline"
+                    type="date"
+                    required
+                    defaultValue={editingRole?.deadline}
+                  />
+                </label>
+              </div>
+              <label>
+                촬영 지역
+                <input
+                  name="location"
+                  required
+                  defaultValue={editingRole?.location}
+                  placeholder="예: 서울 마포구"
+                />
+              </label>
+              <label>
+                출연료·교통·식비
+                <input
+                  name="pay"
+                  required
+                  defaultValue={editingRole?.pay}
+                  placeholder="예: 1일 15만 원, 교통비 별도"
+                />
+              </label>
+              <label>
+                필수 조건
+                <input
+                  name="requirement"
+                  defaultValue={editingRole?.requirement}
+                  placeholder="예: 촬영일 가능, 서울 이동 가능"
+                />
+              </label>
+              <div className="form-two">
+                <label>
+                  담당자
+                  <input
+                    name="contactName"
+                    required
+                    defaultValue={editingRole?.contactName}
+                    placeholder="제작팀"
+                  />
+                </label>
+                <label>
+                  결과 안내일
+                  <input
+                    name="announcementDate"
+                    type="date"
+                    required
+                    defaultValue={editingRole?.announcementDate}
+                  />
+                </label>
+              </div>
+              <button className="button button-primary full" disabled={busy}>
+                {editingRole ? '변경 내용 저장' : '배역 게시하기'}
+              </button>
+            </form>
+          </section>
+        </div>
+      )}
+    </main>
+  );
+}
