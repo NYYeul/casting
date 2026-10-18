@@ -1,8 +1,43 @@
-# 🎬 캐스팅 스와이프 (Casting Swipe)
+<div align="center">
 
-> 소규모 제작팀과 배우를 연결하는 캐스팅 플랫폼 — 공고 링크로 지원을 받고, 추천·비교·팀 투표로 최종 후보를 정하고, 오디션 일정까지 한 곳에서 진행합니다.
+# 🎬 캐스팅 스와이프
 
-모바일 퍼스트 **반응형 웹(PWA)** 입니다. 배우는 앱 설치 없이 공유된 링크로 바로 지원하고, 제작자는 데스크탑/모바일 모두에서 후보를 검토합니다.
+### Casting Swipe — 소규모 제작팀과 배우를 연결하는 캐스팅 플랫폼
+
+공고 링크 하나로 지원을 받고, **추천·비교·팀 투표**로 최종 후보를 정하고, **오디션 일정**까지 한 곳에서.
+
+배우는 앱 설치 없이 공유된 링크로 바로 지원합니다. 모바일 퍼스트 **반응형 웹(PWA)** 입니다.
+
+<br>
+
+[![Next.js](https://img.shields.io/badge/Next.js-16.4-black?logo=next.js)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![pnpm](https://img.shields.io/badge/pnpm-9-F69220?logo=pnpm&logoColor=white)](https://pnpm.io)
+[![Tests](https://img.shields.io/badge/tests-33_passing-brightgreen)](#-검증-명령)
+[![PWA](https://img.shields.io/badge/PWA-installable-6c3df4)](public/manifest.webmanifest)
+
+<br>
+
+[빠른 시작](#-빠른시작) · [주요 기능](#-주요-기능) · [구조](#-구조) · [협업 가이드](#-협업-가이드) · [로드맵](#️-다음-할-일-백로그)
+
+```bash
+pnpm install && cp .env.example .env.local && pnpm dev
+```
+
+</div>
+
+---
+
+<div align="center">
+
+| 랜딩 | 제작자 스튜디오 |
+|:---:|:---:|
+| <img src="docs/screenshots/landing.png" width="380" alt="랜딩"> | <img src="docs/screenshots/studio.png" width="380" alt="스튜디오"> |
+| **배우 검색** | **팀 보드** |
+| <img src="docs/screenshots/actors.png" width="380" alt="배우 검색"> | <img src="docs/screenshots/board.png" width="380" alt="팀 보드"> |
+
+</div>
 
 ---
 
@@ -129,6 +164,10 @@ pnpm format         # prettier --write
 
 자세한 계획은 [docs/IMPLEMENTATION_BACKLOG.md](docs/IMPLEMENTATION_BACKLOG.md)와 [docs/TECHNICAL_DESIGN.md](docs/TECHNICAL_DESIGN.md) §7을 참고하세요.
 
-## 📄 라이선스
+---
 
-팀 프로젝트 — 내부 사용.
+<div align="center">
+
+팀 프로젝트 — 내부 사용 · Made with 💜 for film crews & actors
+
+</div>
