@@ -1,3 +1,4 @@
+import { dataDirectory } from '@/lib/data-directory';
 import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
       { error: 'JPG, PNG, WEBP 사진 또는 PDF만 올릴 수 있습니다.' },
       { status: 415 },
     );
-  const dir = join(process.cwd(), 'data', 'uploads');
+  const dir = join(dataDirectory(), 'uploads');
   await mkdir(dir, { recursive: true });
   const name = `${randomUUID()}.${ext}`;
   await writeFile(join(dir, name), bytes);

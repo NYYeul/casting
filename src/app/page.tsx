@@ -1,3 +1,4 @@
+import { DemoEntry } from '@/components/demo-entry';
 import Link from 'next/link';
 import { Brand } from '@/components/brand';
 import { getSession, homeFor } from '@/lib/auth';
@@ -21,7 +22,8 @@ const features = [
 
 export default async function Landing() {
   const session = await getSession();
-  const start = session ? homeFor(session.role) : '/signup';
+  const demo = process.env.DEMO_MODE === 'true';
+  const start = session ? homeFor(session.role) : demo ? '/login' : '/signup';
   return (
     <main className="landing-page">
       <header className="lp-nav">
@@ -40,10 +42,10 @@ export default async function Landing() {
           ) : (
             <>
               <Link className="text-button" href="/login">
-                로그인
+                {demo ? '바로 체험하기' : '로그인'}
               </Link>
               <Link className="button button-primary sm" href="/signup">
-                시작하기
+                {demo ? '역할 선택하기' : '시작하기'}
               </Link>
             </>
           )}
@@ -70,14 +72,18 @@ export default async function Landing() {
               </div>
             ))}
           </div>
-          <div className="lp-cta">
-            <Link className="button button-primary" href={start}>
-              시작하기 →
-            </Link>
-            <Link className="button button-outline" href="/actor">
-              모집 중인 배역 보기
-            </Link>
-          </div>
+          {demo ? (
+            <DemoEntry />
+          ) : (
+            <div className="lp-cta">
+              <Link className="button button-primary" href={start}>
+                시작하기 →
+              </Link>
+              <Link className="button button-outline" href="/actor">
+                모집 중인 배역 보기
+              </Link>
+            </div>
+          )}
         </div>
         <div className="lp-collage" aria-hidden>
           {collage.map((id, index) => (
@@ -114,7 +120,7 @@ export default async function Landing() {
         <ol className="lp-steps">
           <li>
             <b>1</b>
-            <strong>가입하고 역할 선택</strong>
+            <strong>{demo ? '역할 선택하고 바로 체험' : '가입하고 역할 선택'}</strong>
             <span>제작자 또는 배우로 시작합니다.</span>
           </li>
           <li>

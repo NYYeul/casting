@@ -1,3 +1,4 @@
+import { dataDirectory } from '@/lib/data-directory';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
@@ -14,7 +15,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ na
   const match = /^([a-f0-9-]{36})\.(jpg|png|webp|pdf)$/.exec(name);
   if (!match) return new NextResponse('Not found', { status: 404 });
   try {
-    const file = await readFile(join(process.cwd(), 'data', 'uploads', name));
+    const file = await readFile(join(dataDirectory(), 'uploads', name));
     return new NextResponse(new Uint8Array(file), {
       headers: {
         'Content-Type': TYPES[match[2]],

@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { dataDirectory } from './data-directory';
 import { join } from 'node:path';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { hashPassword } from './password';
@@ -9,8 +10,12 @@ let database: DatabaseSync | undefined;
 
 function db() {
   if (database) return database;
-  const path = join(process.cwd(), 'data', 'casting.sqlite');
-  mkdirSync(join(process.cwd(), 'data'), { recursive: true });
+  const directory = dataDirectory();
+  const path = join(directory, 'casting.sqlite');
+  mkdirSync(directory, { recursive: true });
+  if (process.env.DEMO_MODE === 'true' && process.env.DEMO_BUILD !== 'true' && !existsSync(path)) {
+    copyFileSync(join(process.cwd(), '.demo', 'casting.sqlite'), path);
+  }
   database = new DatabaseSync(path);
   database.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
   database.exec(`
@@ -133,7 +138,10 @@ function db() {
   addColumn(database, 'actor_profiles', 'documents', "TEXT NOT NULL DEFAULT '[]'");
   addColumn(database, 'audition_events', 'place', "TEXT NOT NULL DEFAULT ''");
   addColumn(database, 'audition_events', 'meeting_type', "TEXT NOT NULL DEFAULT ''");
-  if (process.env.NODE_ENV !== 'production' && process.env.SEED_DEMO !== 'false') {
+  if (
+    (process.env.NODE_ENV !== 'production' || process.env.DEMO_BUILD === 'true') &&
+    process.env.SEED_DEMO !== 'false'
+  ) {
     seedDemo(database);
     seedAccounts(database);
     seedTeams(database);
