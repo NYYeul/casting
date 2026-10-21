@@ -11,6 +11,8 @@ type ProjectItem = { id: string; title: string; role: BoardRole };
 type Member = { userId: string; name: string; role: BoardRole };
 type Vote = { userId: string; name: string };
 type Note = { id: string; body: string; userId: string; name: string; createdAt: string };
+/** 단계는 팀 공유 값이라, 마지막으로 옮긴 사람을 카드에 적어 준다. */
+type Move = { userId: string; name: string; column: ColumnKey; at: string };
 type CardBase = {
   name: string;
   age: number | null;
@@ -19,6 +21,7 @@ type CardBase = {
   votes: Vote[];
   notes: Note[];
   noteCount: number;
+  lastMove: Move | null;
 };
 type ApplicationCard = CardBase & {
   kind: 'application';
@@ -49,6 +52,19 @@ type BoardData = {
   members: Member[];
   columns: Column[];
 };
+
+/** '방금', '3시간 전', '10/21' 처럼 이동 시각을 짧게 적는다. */
+function moveAgo(at: string) {
+  const minutes = Math.floor((Date.now() - Date.parse(at)) / 60000);
+  if (!Number.isFinite(minutes) || minutes < 1) return '방금';
+  if (minutes < 60) return `${minutes}분 전`;
+  if (minutes < 60 * 24) return `${Math.floor(minutes / 60)}시간 전`;
+  return new Date(at).toLocaleDateString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: 'numeric',
+    day: 'numeric',
+  });
+}
 
 /** 카드 종류에 관계없이 스레드·드래그 등의 키로 쓰는 고유 id */
 function cardRefId(card: Card) {
@@ -458,6 +474,14 @@ export default function BoardClient({ meId }: { meId: string }) {
             </div>
 
             {board && (
+              <p className={styles.sharedNote}>
+                <strong>단계(검토 중·1차 합격·최종 후보·보류)는 팀 전체가 함께 보는 값</strong>
+                이에요. 한 명이 옮기면 모두에게 똑같이 보이고, 카드에 누가 옮겼는지 남습니다.
+                <strong> ♥ 픽과 메모는 사람별</strong>로 쌓이고 이름이 함께 표시돼요.
+              </p>
+            )}
+
+            {board && (
               <div className={styles.teamBar}>
                 <div className={styles.memberStrip} aria-label="팀원 목록">
                   {board.members.map((member) => (
@@ -625,6 +649,12 @@ export default function BoardClient({ meId }: { meId: string }) {
                             </>
                           )}
                           {card.intro && <p className={styles.cardIntro}>{card.intro}</p>}
+                          {/* 단계는 팀 공유 값이다. 누가 옮겼는지 적어 줘야 서로의 분류를 확인할 수 있다. */}
+                          <p className={styles.moveLog}>
+                            {card.lastMove
+                              ? `${card.lastMove.name}님이 ${moveAgo(card.lastMove.at)} ${column.title}(으)로 이동`
+                              : '아직 이동 기록이 없어요'}
+                          </p>
                           <div className={styles.cardActions}>
                             <button
                               className={`${styles.voteBtn}${card.votes.some((vote) => vote.userId === meId) ? ` ${styles.on}` : ''}`}

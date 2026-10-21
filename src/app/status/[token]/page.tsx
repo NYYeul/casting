@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { getApplicationByReceipt, getLatestOffer, getRoleById } from '@/lib/db';
 import { publicLabels } from '@/lib/types';
 import ChatThread from '@/components/chat-thread';
@@ -7,12 +6,52 @@ import OfferResponse from '@/components/offer-response';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * 접수 링크를 찾을 수 없을 때. 예전에는 통째로 404가 떠서 미완성 화면처럼 보였다.
+ * 데모 환경은 저장소가 임시 폴더라 서버가 새로 뜨면 접수 기록이 사라질 수 있는데,
+ * 링크는 브라우저에 남아 있어서 이 상황이 실제로 자주 생긴다.
+ */
+function ReceiptNotFound() {
+  return (
+    <main className="app-shell narrow">
+      <header className="sub-header">
+        <Link className="sh-back" href="/actor" aria-label="배역 목록으로">
+          ‹
+        </Link>
+        <h1>지원 현황</h1>
+        <span className="sh-more" />
+      </header>
+      <div className="status-wrap">
+        <div className="empty-card">
+          <strong>이 접수 기록을 찾을 수 없습니다.</strong>
+          <p style={{ marginTop: 10, lineHeight: 1.75 }}>
+            링크가 잘못되었거나, 체험용 데모 서버가 다시 시작되면서 접수 기록이 초기화된 경우입니다.
+            데모에서는 지원 내용이 오래 보관되지 않습니다.
+          </p>
+        </div>
+        <div className="split-actions" style={{ marginTop: 14 }}>
+          <Link className="button button-primary" href="/actor">
+            모집 중인 배역 보기
+          </Link>
+          <Link className="button button-soft" href="/me">
+            내 지원 현황
+          </Link>
+        </div>
+        <p className="small-note">
+          회원으로 로그인해 지원하면 접수 내역이 계정에 남아 &lsquo;내 지원 현황&rsquo;에서 다시 볼
+          수 있습니다.
+        </p>
+      </div>
+    </main>
+  );
+}
+
 export default async function StatusPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const application = getApplicationByReceipt(token);
-  if (!application) notFound();
+  if (!application) return <ReceiptNotFound />;
   const role = getRoleById(application.roleId);
-  if (!role) notFound();
+  if (!role) return <ReceiptNotFound />;
   const offer = getLatestOffer(application.id);
   return (
     <main className="app-shell narrow">

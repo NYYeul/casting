@@ -372,6 +372,26 @@
   border-color: #f6c3d2;
   background: #fff5f8;
 }
+/* 무엇이 팀 공유 값이고 무엇이 개인 값인지 알려 주는 안내 */
+.sharedNote {
+  margin: 0 0 12px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  background: var(--lavender, #f1edfa);
+  font-size: 11.5px;
+  line-height: 1.75;
+  color: #5c5570;
+}
+.sharedNote strong {
+  color: var(--ink, #241c3a);
+}
+/* 이 카드를 마지막으로 옮긴 사람 */
+.moveLog {
+  margin: 6px 0 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--faint);
+}
 .voterNames {
   font-size: 10px;
   color: var(--faint);

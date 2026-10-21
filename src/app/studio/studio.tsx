@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Application, Audition, PublicStage, ReviewStatus, Role } from '@/lib/types';
 import { publicLabels, reviewLabels } from '@/lib/types';
 import ChatThread from '@/components/chat-thread';
+import PhotoLightbox from '@/components/photo-lightbox';
 import ProducerNav from '@/components/producer-nav';
 
 type Tab = 'home' | 'applicants' | 'messages' | 'profile';
@@ -369,6 +370,7 @@ export default function Studio({
   const [online, setOnline] = useState(true);
   const [note, setNote] = useState('');
   const [pendingPublicStage, setPendingPublicStage] = useState<PublicStage | null>(null);
+  const [photoAt, setPhotoAt] = useState<number | null>(null);
 
   const role = roles.find((item) => item.id === roleId);
   const selected = applications.find((item) => item.id === selectedId);
@@ -441,6 +443,7 @@ export default function Studio({
   useEffect(() => {
     setNote(selected?.note || '');
     setPendingPublicStage(null);
+    setPhotoAt(null);
   }, [selectedId, selected?.note]);
 
   async function updateApplication(id: string, patch: Partial<Application>) {
@@ -661,7 +664,10 @@ export default function Studio({
             <h1 className="page-title">오늘의 캐스팅</h1>
             <div className="section-head" style={{ marginTop: 0 }}>
               <h2>진행 중인 프로젝트</h2>
-              <button onClick={() => setTab('applicants')}>전체 보기 ›</button>
+              {/* 이 화면이 이미 프로젝트 전체 목록이다. 예전에는 '전체 보기'가 지원자 탭으로 넘어가 혼란스러웠다. */}
+              <span className="muted" style={{ fontSize: 12 }}>
+                {projects.length}개
+              </span>
             </div>
             {projects.length === 0 ? (
               <div className="empty-card">
@@ -1164,11 +1170,25 @@ export default function Studio({
               </button>
             </div>
             <div className="detail-profile">
-              <Avatar
-                name={selected.name}
-                photoUrl={selected.photoUrl}
-                className="avatar avatar-large"
-              />
+              {selected.photoUrls.length > 0 ? (
+                <button
+                  className="avatar-open"
+                  onClick={() => setPhotoAt(0)}
+                  aria-label={`${selected.name} 사진 크게 보기`}
+                >
+                  <Avatar
+                    name={selected.name}
+                    photoUrl={selected.photoUrl}
+                    className="avatar avatar-large"
+                  />
+                </button>
+              ) : (
+                <Avatar
+                  name={selected.name}
+                  photoUrl={selected.photoUrl}
+                  className="avatar avatar-large"
+                />
+              )}
               <div>
                 <h2>
                   {selected.name} <small>{selected.age ? `(${selected.age})` : ''}</small>
@@ -1204,10 +1224,11 @@ export default function Studio({
               <p>
                 연락처: {selected.phone} · {selected.email}
               </p>
-              {selected.photoUrl && (
-                <a href={selected.photoUrl} target="_blank" rel="noreferrer">
-                  사진 열기 ↗
-                </a>
+              {selected.photoUrls.length > 0 && (
+                <button className="text-button" onClick={() => setPhotoAt(0)}>
+                  사진 크게 보기
+                  {selected.photoUrls.length > 1 && ` (${selected.photoUrls.length}장)`}
+                </button>
               )}
               {selected.videoUrl && (
                 <a href={selected.videoUrl} target="_blank" rel="noreferrer">
@@ -1224,17 +1245,31 @@ export default function Studio({
                     ['hold', '보류'],
                     ['interested', '관심 있음'],
                   ] as [ReviewStatus, string][]
-                ).map(([status, label]) => (
-                  <button
-                    key={status}
-                    disabled={busy}
-                    className={selected.status === status ? 'selected' : ''}
-                    onClick={() => void updateApplication(selected.id, { status })}
-                  >
-                    {label}
-                  </button>
-                ))}
+                ).map(([status, label]) => {
+                  const picked = selected.status === status;
+                  return (
+                    <button
+                      key={status}
+                      disabled={busy}
+                      aria-pressed={picked}
+                      title={picked ? '다시 누르면 선택이 풀려요' : undefined}
+                      className={picked ? 'selected' : ''}
+                      // 같은 버튼을 다시 누르면 '신규'로 되돌려 선택을 푼다.
+                      onClick={() =>
+                        void updateApplication(selected.id, { status: picked ? 'new' : status })
+                      }
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
+              <p className="review-hint">
+                {selected.status === 'new'
+                  ? '아직 분류하지 않았어요. 고른 버튼을 한 번 더 누르면 이 상태로 돌아옵니다.'
+                  : `현재 ${reviewLabels[selected.status]}. 같은 버튼을 다시 누르면 선택이 풀려요.`}
+                <br />이 분류는 팀 전체가 함께 보는 값이라 팀 보드의 단계도 같이 바뀝니다.
+              </p>
               <label className="field-label" htmlFor="review-note">
                 팀 내부 메모
               </label>
@@ -1317,6 +1352,15 @@ export default function Studio({
             </button>
           </section>
         </div>
+      )}
+
+      {selected && photoAt !== null && (
+        <PhotoLightbox
+          photos={selected.photoUrls}
+          startAt={photoAt}
+          name={selected.name}
+          onClose={() => setPhotoAt(null)}
+        />
       )}
 
       {chatId && (

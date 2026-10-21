@@ -128,6 +128,41 @@ export function getUserById(id: string) {
   return row ? userFromRow(row as Row) : null;
 }
 
+/**
+ * 공고에 함께 보여 주는 제작자 정보.
+ * 확인된 사실만 담는다 — 아직 재학·사업자 인증 절차가 없으므로 '인증' 배지는 만들지 않는다.
+ * 가짜 인증 표시는 "믿을 만한 공고인지 알고 싶다"는 요구를 오히려 배신한다.
+ */
+export type ProducerIntro = {
+  name: string;
+  orgType: string;
+  orgName: string;
+  /** 이 제작자가 올린 공고 수 (처음 올린 공고인지 알 수 있다) */
+  totalRoles: number;
+  openRoles: number;
+  /** 가입 연월 'YYYY-MM' */
+  memberSince: string;
+};
+
+export function getProducerIntro(ownerId: string): ProducerIntro | null {
+  const user = getUserById(ownerId);
+  if (!user || user.role !== 'producer') return null;
+  const row = db()
+    .prepare(
+      `SELECT COUNT(*) total, SUM(CASE WHEN is_closed=0 THEN 1 ELSE 0 END) open
+       FROM roles WHERE owner_id=?`,
+    )
+    .get(ownerId) as { total: number; open: number | null } | undefined;
+  return {
+    name: user.name,
+    orgType: user.orgType,
+    orgName: user.orgName,
+    totalRoles: Number(row?.total || 0),
+    openRoles: Number(row?.open || 0),
+    memberSince: user.createdAt.slice(0, 7),
+  };
+}
+
 export function getUserWithHash(email: string) {
   const row = db().prepare('SELECT * FROM users WHERE email=?').get(email.toLowerCase()) as
     Row | undefined;

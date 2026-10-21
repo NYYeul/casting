@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import FindSwitch from '@/components/find-switch';
 import ProducerNav from '@/components/producer-nav';
-import { IMAGE_TAGS, REGIONS, SKILLS } from '@/lib/profile';
+import { IMAGE_TAG_GROUPS, IMAGE_TAGS, REGIONS, SKILL_GROUPS, SKILLS } from '@/lib/profile';
 import styles from './recommend.module.css';
 
 type RecoActor = {
@@ -175,6 +176,7 @@ export default function RecommendClient() {
           배역 조건과 배우 프로필을 비교해 적합도 순으로 제안합니다 (조건 기반 분석)
         </p>
         <h1 className="page-title">배우 추천</h1>
+        <FindSwitch active="recommend" />
 
         <section className={styles.panel}>
           <label className={styles.field}>
@@ -267,33 +269,45 @@ export default function RecommendClient() {
           </div>
           <fieldset className={styles.fieldset}>
             <legend className={styles.label}>원하는 이미지 키워드</legend>
-            <div className="chip-pick">
-              {IMAGE_TAGS.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  className={pickedTags.includes(tag) ? 'on' : ''}
-                  onClick={() => toggle(pickedTags, setPickedTags, tag)}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
+            {IMAGE_TAG_GROUPS.map((group) => (
+              <div key={group.title} className="chip-group">
+                <p className="chip-group-label">{group.title}</p>
+                <div className="chip-pick">
+                  {group.items.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      aria-pressed={pickedTags.includes(tag)}
+                      className={pickedTags.includes(tag) ? 'on' : ''}
+                      onClick={() => toggle(pickedTags, setPickedTags, tag)}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </fieldset>
           <fieldset className={styles.fieldset}>
             <legend className={styles.label}>필요한 특기</legend>
-            <div className="chip-pick">
-              {SKILLS.map((skill) => (
-                <button
-                  key={skill}
-                  type="button"
-                  className={pickedSkills.includes(skill) ? 'on' : ''}
-                  onClick={() => toggle(pickedSkills, setPickedSkills, skill)}
-                >
-                  {skill}
-                </button>
-              ))}
-            </div>
+            {SKILL_GROUPS.map((group) => (
+              <div key={group.title} className="chip-group">
+                <p className="chip-group-label">{group.title}</p>
+                <div className="chip-pick">
+                  {group.items.map((skill) => (
+                    <button
+                      key={skill}
+                      type="button"
+                      aria-pressed={pickedSkills.includes(skill)}
+                      className={pickedSkills.includes(skill) ? 'on' : ''}
+                      onClick={() => toggle(pickedSkills, setPickedSkills, skill)}
+                    >
+                      {skill}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </fieldset>
           <button className="button button-primary full" onClick={submitManual} disabled={loading}>
             {loading ? '분석 중…' : '추천 받기'}

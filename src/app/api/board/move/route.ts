@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '후보를 찾을 수 없습니다.' }, { status: 404 });
     if (access === 'denied')
       return NextResponse.json({ error: '팀 보드 접근 권한이 없습니다.' }, { status: 403 });
-    const candidate = moveCandidate(candidateId, column);
+    const candidate = moveCandidate(candidateId, column, userId);
     if (!candidate)
       return NextResponse.json({ error: '후보를 찾을 수 없습니다.' }, { status: 404 });
     return NextResponse.json({ ok: true, candidateId, column });
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '지원서를 찾을 수 없습니다.' }, { status: 404 });
   if (access === 'denied')
     return NextResponse.json({ error: '팀 보드 접근 권한이 없습니다.' }, { status: 403 });
-  const application = moveCard(applicationId, column);
+  const application = moveCard(applicationId, column, userId);
   if (!application)
     return NextResponse.json({ error: '지원서를 찾을 수 없습니다.' }, { status: 404 });
   return NextResponse.json({ ok: true, applicationId, column });

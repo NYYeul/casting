@@ -4,13 +4,16 @@ import Link from 'next/link';
 import { useRef, useState } from 'react';
 import ActorNav from '@/components/actor-nav';
 import type { ActorProfileFull, ProfileDocument } from '@/lib/accounts';
+import type { ProfileDraft } from '@/lib/profile-draft';
 import {
-  IMAGE_TAGS,
+  IMAGE_TAG_GROUPS,
+  MAX_SKILLS,
   MAX_TAGS,
   profileCompletion,
   REGIONS,
-  SKILLS,
+  SKILL_GROUPS,
   type Gender,
+  type PickGroup,
 } from '@/lib/profile';
 import { embedUrl } from '@/lib/video';
 
@@ -31,6 +34,77 @@ type ActorProfile = ActorProfileFull;
 // (pulls in node:sqlite), so it cannot be imported from a client component.
 const MAX_DOCUMENTS = 5;
 
+/** PDF 초안에서 채울 수 있는 항목과 화면에 쓰는 이름 */
+const DRAFT_FIELDS: [keyof ProfileDraft, string][] = [
+  ['name', '이름'],
+  ['gender', '성별'],
+  ['birthYear', '출생 연도'],
+  ['height', '키'],
+  ['weight', '몸무게'],
+  ['region', '활동 지역'],
+  ['agency', '소속'],
+  ['intro', '소개'],
+  ['tags', '이미지 키워드'],
+  ['skills', '특기'],
+  ['filmography', '필모그래피'],
+];
+
+const GENDER_TEXT: Record<string, string> = { female: '여성', male: '남성', other: '기타' };
+
+/** 초안 값을 한 줄로 보여 준다. */
+function draftValueText(draft: ProfileDraft, key: keyof ProfileDraft): string {
+  const field = draft[key];
+  if (!field) return '';
+  const { value } = field;
+  if (key === 'gender') return GENDER_TEXT[String(value)] ?? String(value);
+  if (key === 'height') return `${value}cm`;
+  if (key === 'weight') return `${value}kg`;
+  if (key === 'birthYear') return `${value}년`;
+  if (Array.isArray(value))
+    return value
+      .map((item) =>
+        typeof item === 'string'
+          ? item
+          : `${item.year} ${item.title}${item.role ? ` (${item.role})` : ''}`,
+      )
+      .join(', ');
+  return String(value).length > 80 ? `${String(value).slice(0, 80)}…` : String(value);
+}
+
+/** 키워드·특기를 묶음별로 보여 준다. 목록이 길어서 한 줄로 늘어놓으면 찾기 어렵다. */
+function ChipGroups({
+  groups,
+  picked,
+  onPick,
+}: {
+  groups: PickGroup[];
+  picked: string[];
+  onPick: (value: string) => void;
+}) {
+  return (
+    <>
+      {groups.map((group) => (
+        <div key={group.title} className="chip-group">
+          <p className="chip-group-label">{group.title}</p>
+          <div className="chip-pick">
+            {group.items.map((item) => (
+              <button
+                key={item}
+                type="button"
+                aria-pressed={picked.includes(item)}
+                className={picked.includes(item) ? 'on' : ''}
+                onClick={() => onPick(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
 export default function ProfileEditor({ initial }: { initial: ActorProfile }) {
   const [profile, setProfile] = useState(initial);
   const [saved, setSaved] = useState(initial);
@@ -40,8 +114,16 @@ export default function ProfileEditor({ initial }: { initial: ActorProfile }) {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [newDate, setNewDate] = useState('');
+  // PDF로 만든 프로필 초안. 배우가 고른 항목만 입력칸에 채운다.
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [draft, setDraft] = useState<ProfileDraft | null>(null);
+  const [draftNote, setDraftNote] = useState('');
+  const [picked, setPicked] = useState<Record<string, boolean>>({});
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
   const docInput = useRef<HTMLInputElement>(null);
+  const draftInput = useRef<HTMLInputElement>(null);
   const completion = profileCompletion(profile);
   const dirty = JSON.stringify(profile) !== JSON.stringify(saved);
 
@@ -118,6 +200,61 @@ export default function ProfileEditor({ initial }: { initial: ActorProfile }) {
     }
   }
 
+  /** PDF를 읽어 초안을 만든다. 저장은 하지 않고 화면에서 확인하게 한다. */
+  async function makeDraft(body: FormData | string) {
+    setDraftBusy(true);
+    setError('');
+    setDraft(null);
+    try {
+      const response = await fetch(
+        '/api/profile/draft',
+        typeof body === 'string'
+          ? {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: body }),
+            }
+          : { method: 'POST', body },
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '초안을 만들지 못했습니다.');
+      setDraft(data.draft as ProfileDraft);
+      setDraftNote(data.note || '');
+      setPicked(Object.fromEntries(Object.keys(data.draft).map((key) => [key, true])));
+      if (data.filled === 0 && !data.note)
+        setDraftNote('읽을 수 있는 항목을 찾지 못했어요. 아래에 내용을 붙여넣어 보세요.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '초안을 만들지 못했습니다.');
+    } finally {
+      setDraftBusy(false);
+      if (draftInput.current) draftInput.current.value = '';
+    }
+  }
+
+  /** 고른 항목만 입력칸에 채운다. 실제 저장은 아래 '저장' 버튼을 눌러야 된다. */
+  function applyDraft() {
+    if (!draft) return;
+    setProfile((current) => {
+      const next = { ...current };
+      if (picked.name && draft.name) next.name = draft.name.value;
+      if (picked.gender && draft.gender) next.gender = draft.gender.value;
+      if (picked.birthYear && draft.birthYear) next.birthYear = draft.birthYear.value;
+      if (picked.height && draft.height) next.height = draft.height.value;
+      if (picked.weight && draft.weight) next.weight = draft.weight.value;
+      if (picked.region && draft.region) next.region = draft.region.value;
+      if (picked.agency && draft.agency) next.agency = draft.agency.value;
+      if (picked.intro && draft.intro) next.intro = draft.intro.value;
+      if (picked.tags && draft.tags) next.tags = draft.tags.value.slice(0, MAX_TAGS);
+      if (picked.skills && draft.skills) next.skills = draft.skills.value.slice(0, MAX_SKILLS);
+      if (picked.filmography && draft.filmography)
+        next.filmography = [...current.filmography, ...draft.filmography.value].slice(0, 12);
+      return next;
+    });
+    setDraft(null);
+    setDraftNote('');
+    setNotice('초안을 채웠어요. 내용을 확인하고 맨 아래 저장을 눌러 주세요.');
+  }
+
   async function save() {
     setBusy(true);
     setError('');
@@ -171,6 +308,111 @@ export default function ProfileEditor({ initial }: { initial: ActorProfile }) {
             ))}
           </aside>
           <div className="editor-body">
+            {/*
+              프로필 PDF로 입력칸을 먼저 채워 주는 자리.
+              규칙 기반으로 읽어서 같은 PDF면 늘 같은 결과가 나오고, 어느 줄에서 읽었는지 함께 보여 준다.
+              읽은 값을 바로 저장하지 않고 배우가 고른 항목만 채운다.
+            */}
+            <section className="editor-card draft-card">
+              <h2>
+                프로필 PDF로 먼저 채우기 <small>선택</small>
+              </h2>
+              <p className="muted small">
+                경력기술서·프로필 PDF를 올리면 이름·나이·키·지역·특기·필모그래피를 읽어 입력칸
+                초안을 만들어요. 읽은 값은 바로 저장되지 않고, 확인한 항목만 채웁니다.
+              </p>
+              <div className="split-actions" style={{ marginTop: 12 }}>
+                <button
+                  className="button button-primary"
+                  disabled={draftBusy}
+                  onClick={() => draftInput.current?.click()}
+                >
+                  {draftBusy ? '읽는 중…' : 'PDF 올려서 초안 만들기'}
+                </button>
+                <button
+                  className="button button-soft"
+                  onClick={() => setPasteOpen((open) => !open)}
+                  aria-expanded={pasteOpen}
+                >
+                  내용 붙여넣기
+                </button>
+              </div>
+              <input
+                ref={draftInput}
+                type="file"
+                accept="application/pdf,.pdf"
+                hidden
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  const form = new FormData();
+                  form.append('file', file);
+                  void makeDraft(form);
+                }}
+              />
+              {pasteOpen && (
+                <div style={{ marginTop: 12 }}>
+                  <label className="field-label" htmlFor="draft-paste">
+                    프로필 내용 붙여넣기
+                  </label>
+                  <textarea
+                    id="draft-paste"
+                    rows={6}
+                    value={pasteText}
+                    onChange={(event) => setPasteText(event.target.value)}
+                    placeholder={
+                      '이름: 홍길동\n1999년생 · 여성\n키 165cm\n지역: 서울\n특기: 노래, 댄스'
+                    }
+                  />
+                  <button
+                    className="button button-soft full"
+                    disabled={draftBusy || pasteText.trim().length < 10}
+                    onClick={() => void makeDraft(pasteText)}
+                  >
+                    붙여넣은 내용으로 초안 만들기
+                  </button>
+                  <p className="muted small">
+                    스캔한 PDF는 글자가 아니라 사진이라 읽을 수 없어요. 그럴 때 이 칸을 쓰세요.
+                  </p>
+                </div>
+              )}
+              {draftNote && <p className="form-error">{draftNote}</p>}
+              {draft && Object.keys(draft).length > 0 && (
+                <div className="draft-result">
+                  <strong>{Object.keys(draft).length}개 항목을 읽었어요</strong>
+                  <p className="muted small">채울 항목을 확인해 주세요.</p>
+                  {DRAFT_FIELDS.filter(([key]) => draft[key]).map(([key, label]) => (
+                    <label key={key} className="draft-row">
+                      <input
+                        type="checkbox"
+                        checked={picked[key] ?? true}
+                        onChange={(event) =>
+                          setPicked((current) => ({ ...current, [key]: event.target.checked }))
+                        }
+                      />
+                      <span className="draft-label">{label}</span>
+                      <span className="draft-value">{draftValueText(draft, key)}</span>
+                      <small className="draft-source">{draft[key]!.source}</small>
+                    </label>
+                  ))}
+                  <div className="split-actions">
+                    <button className="button button-primary" onClick={applyDraft}>
+                      고른 항목 채우기
+                    </button>
+                    <button
+                      className="button button-soft"
+                      onClick={() => {
+                        setDraft(null);
+                        setDraftNote('');
+                      }}
+                    >
+                      쓰지 않기
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+
             <section id="basic" className="editor-card">
               <h2>기본 정보</h2>
               <div className="role-form">
@@ -349,29 +591,22 @@ export default function ProfileEditor({ initial }: { initial: ActorProfile }) {
                   최대 {MAX_TAGS}개 · {profile.tags.length}개 선택
                 </small>
               </h2>
-              <div className="chip-pick">
-                {IMAGE_TAGS.map((tag) => (
-                  <button
-                    key={tag}
-                    className={profile.tags.includes(tag) ? 'on' : ''}
-                    onClick={() => toggle('tags', tag, MAX_TAGS)}
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-              <h2 style={{ marginTop: 22 }}>특기</h2>
-              <div className="chip-pick">
-                {SKILLS.map((skill) => (
-                  <button
-                    key={skill}
-                    className={profile.skills.includes(skill) ? 'on' : ''}
-                    onClick={() => toggle('skills', skill, 12)}
-                  >
-                    {skill}
-                  </button>
-                ))}
-              </div>
+              <ChipGroups
+                groups={IMAGE_TAG_GROUPS}
+                picked={profile.tags}
+                onPick={(tag) => toggle('tags', tag, MAX_TAGS)}
+              />
+              <h2 style={{ marginTop: 22 }}>
+                특기{' '}
+                <small>
+                  최대 {MAX_SKILLS}개 · {profile.skills.length}개 선택
+                </small>
+              </h2>
+              <ChipGroups
+                groups={SKILL_GROUPS}
+                picked={profile.skills}
+                onPick={(skill) => toggle('skills', skill, MAX_SKILLS)}
+              />
             </section>
 
             <section id="filmo" className="editor-card">

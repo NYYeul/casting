@@ -2,11 +2,45 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import FindSwitch from '@/components/find-switch';
 import ProducerNav from '@/components/producer-nav';
 import type { ActorProfileFull } from '@/lib/accounts';
-import { ageOf, genderLabel, IMAGE_TAGS, REGIONS, SKILLS } from '@/lib/profile';
+import {
+  ageOf,
+  genderLabel,
+  IMAGE_TAG_GROUPS,
+  MAX_RANGE_DAYS,
+  QUICK_IMAGE_TAGS,
+  REGIONS,
+  SKILL_GROUPS,
+  type Availability,
+} from '@/lib/profile';
 
-type Result = ActorProfileFull & { favorite: boolean };
+type Result = ActorProfileFull & { favorite: boolean; availability: Availability | null };
+
+/** '2026-10-24' → '10/24' */
+function shortDay(date: string) {
+  return `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
+}
+
+/** 기간 검색 결과를 배우 카드에 한 줄로 쓴다. */
+function availabilityNote(availability: Availability | null) {
+  if (!availability || availability.days === 0) return null;
+  const { days, blocked, registered } = availability;
+  if (blocked.length === 0)
+    return {
+      tone: registered ? 'ok' : 'unknown',
+      text: registered
+        ? days === 1
+          ? '촬영일 가능'
+          : `${days}일 전체 가능`
+        : '출연 불가 일정 미등록',
+    } as const;
+  return {
+    tone: 'partial',
+    text: `${days}일 중 ${days - blocked.length}일 가능 · ${blocked.map(shortDay).join(', ')} 불가`,
+  } as const;
+}
 
 const PAGE_SIZE = 20;
 
@@ -36,6 +70,7 @@ const EMPTY = {
   skill: '',
   tag: '',
   available: '',
+  availableTo: '',
   career: '',
   favorites: false,
   sort: 'recent',
@@ -72,6 +107,7 @@ export default function ActorSearch() {
       'skill',
       'tag',
       'available',
+      'availableTo',
       'sort',
     ] as const)
       if (current[key]) params.set(key, current[key]);
@@ -124,6 +160,12 @@ export default function ActorSearch() {
   const activeCount = (
     ['gender', 'age', 'heightMin', 'heightMax', 'region', 'skill', 'available', 'career'] as const
   ).filter((key) => filters[key]).length;
+
+  // 빠른 필터 줄은 자주 쓰는 키워드만 둔다. 필터 패널에서 고른 키워드는 여기에 붙여 보여 준다.
+  const quickTags =
+    filters.tag && !QUICK_IMAGE_TAGS.includes(filters.tag)
+      ? [...QUICK_IMAGE_TAGS, filters.tag]
+      : QUICK_IMAGE_TAGS;
 
   const filterPanel = (
     <div className="filter-panel">
@@ -202,10 +244,28 @@ export default function ActorSearch() {
         <legend>특기</legend>
         <select value={filters.skill} onChange={(event) => set('skill', event.target.value)}>
           <option value="">전체</option>
-          {SKILLS.map((skill) => (
-            <option key={skill}>{skill}</option>
+          {SKILL_GROUPS.map((group) => (
+            <optgroup key={group.title} label={group.title}>
+              {group.items.map((skill) => (
+                <option key={skill}>{skill}</option>
+              ))}
+            </optgroup>
           ))}
         </select>
+      </fieldset>
+      <fieldset>
+        <legend>이미지 키워드</legend>
+        <select value={filters.tag} onChange={(event) => set('tag', event.target.value)}>
+          <option value="">전체</option>
+          {IMAGE_TAG_GROUPS.map((group) => (
+            <optgroup key={group.title} label={group.title}>
+              {group.items.map((tag) => (
+                <option key={tag}>{tag}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        <small>위쪽 빠른 필터에는 자주 쓰는 키워드만 나와 있어요.</small>
       </fieldset>
       <fieldset>
         <legend>출연 경력</legend>
@@ -220,12 +280,27 @@ export default function ActorSearch() {
       </fieldset>
       <fieldset>
         <legend>출연 가능 일정</legend>
-        <input
-          type="date"
-          value={filters.available}
-          onChange={(event) => set('available', event.target.value)}
-        />
-        <small>해당 날짜를 불가로 등록한 배우는 제외합니다.</small>
+        <div className="range-row">
+          <input
+            aria-label="촬영 시작일"
+            type="date"
+            value={filters.available}
+            onChange={(event) => set('available', event.target.value)}
+          />
+          <span>~</span>
+          <input
+            aria-label="촬영 종료일"
+            type="date"
+            min={filters.available || undefined}
+            disabled={!filters.available}
+            value={filters.availableTo}
+            onChange={(event) => set('availableTo', event.target.value)}
+          />
+        </div>
+        <small>
+          종료일을 비우면 시작일 하루만 봅니다. 기간을 넣으면 하루도 안 되는 배우만 빼고, 나머지는
+          &lsquo;전체 가능 / 일부 가능&rsquo;으로 나눠 보여 줍니다. 최대 {MAX_RANGE_DAYS}일.
+        </small>
       </fieldset>
     </div>
   );
@@ -241,6 +316,7 @@ export default function ActorSearch() {
           </div>
           <span className="count-pill">{loading ? '…' : `${total}명의 배우`}</span>
         </div>
+        <FindSwitch active="search" />
         <div className="search-row">
           <div className="search-box">
             <svg
@@ -289,7 +365,7 @@ export default function ActorSearch() {
           >
             ♥ 관심 배우
           </button>
-          {IMAGE_TAGS.map((tag) => (
+          {quickTags.map((tag) => (
             <button
               key={tag}
               className={filters.tag === tag ? 'filter active' : 'filter'}
@@ -345,6 +421,12 @@ export default function ActorSearch() {
                             .join(' · ') || genderLabel[actor.gender]}
                         </span>
                         {actor.agency && <span className="muted">{actor.agency}</span>}
+                        {(() => {
+                          const note = availabilityNote(actor.availability);
+                          return note ? (
+                            <span className={`avail-note avail-${note.tone}`}>{note.text}</span>
+                          ) : null;
+                        })()}
                         <div className="tag-row">
                           {actor.tags.slice(0, 2).map((tag) => (
                             <i key={tag}>{tag}</i>

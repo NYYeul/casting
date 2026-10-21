@@ -6,7 +6,6 @@ import { getCurrentUser } from '@/lib/auth';
 import { listActorApplications, listOpenRoles } from '@/lib/db';
 import { profileCompletion } from '@/lib/profile';
 import { publicLabels } from '@/lib/types';
-import MyApplications from '../actor/my-applications';
 import ProposalActions from './proposal-actions';
 
 export const dynamic = 'force-dynamic';
@@ -89,8 +88,16 @@ export default async function ActorHome() {
           ))
         )}
 
+        {/*
+          예전에는 서버에 저장된 '내 지원 현황'과 이 기기에만 남는 '내 지원'(MyApplications)을
+          둘 다 보여 줘서 같은 지원이 두 번 나오고, 기기에만 남은 접수 링크는 404가 떴다.
+          로그인한 배우에게는 계정에 묶인 목록 하나만 보여 준다.
+        */}
         <div className="section-head">
           <h2>내 지원 현황</h2>
+          <span className="muted" style={{ fontSize: 12 }}>
+            {applications.length}건
+          </span>
         </div>
         {applications.length === 0 ? (
           <div className="empty-card">아직 지원한 배역이 없습니다.</div>
@@ -110,7 +117,6 @@ export default async function ActorHome() {
             </Link>
           ))
         )}
-        <MyApplications />
 
         <div className="section-head">
           <h2>모집 중인 배역</h2>

@@ -17,6 +17,8 @@ export type BoardRole = 'owner' | 'member';
 export type BoardProject = { id: string; title: string; role: BoardRole };
 export type BoardMember = { userId: string; name: string; role: BoardRole };
 export type BoardVote = { userId: string; name: string };
+/** 이 카드를 마지막으로 옮긴 사람 (팀 공유 단계라서 누가 바꿨는지 보여 준다) */
+export type BoardMove = { userId: string; name: string; column: BoardColumnKey; at: string };
 export type BoardNote = {
   id: string;
   body: string;
@@ -37,6 +39,7 @@ export type BoardCard = {
   votes: BoardVote[];
   notes: BoardNote[];
   noteCount: number;
+  lastMove: BoardMove | null;
 };
 /** 지원하지 않은 배우를 팀이 직접 후보로 올린 카드 */
 export type BoardCandidateCard = {
@@ -51,6 +54,7 @@ export type BoardCandidateCard = {
   votes: BoardVote[];
   notes: BoardNote[];
   noteCount: number;
+  lastMove: BoardMove | null;
   addedBy: { userId: string; name: string };
 };
 export type BoardCardItem = BoardCard | BoardCandidateCard;
@@ -264,6 +268,38 @@ export function listBoard(projectId: string): Board | null {
     notesByCand.set(row.candidate_id, bucket);
   }
 
+  // 카드별 마지막 이동 기록. 같은 카드의 기록 중 가장 최근 것만 남긴다.
+  const lastMoves = new Map<string, BoardMove>();
+  const moveRows = conn
+    .prepare(
+      `SELECT m.application_id, m.candidate_id, m.user_id, m.column_key, m.created_at, u.name
+       FROM board_moves m
+       JOIN users u ON u.id=m.user_id
+       LEFT JOIN applications a ON a.id=m.application_id
+       LEFT JOIN roles r ON r.id=a.role_id
+       LEFT JOIN project_candidates c ON c.id=m.candidate_id
+       WHERE r.project_id=? OR c.project_id=?
+       ORDER BY m.created_at ASC`,
+    )
+    .all(projectId, projectId) as {
+    application_id: string | null;
+    candidate_id: string | null;
+    user_id: string;
+    column_key: string;
+    created_at: string;
+    name: string;
+  }[];
+  for (const row of moveRows) {
+    const key = row.application_id || row.candidate_id;
+    if (!key) continue;
+    lastMoves.set(key, {
+      userId: row.user_id,
+      name: row.name,
+      column: row.column_key as BoardColumnKey,
+      at: row.created_at,
+    });
+  }
+
   const columns: BoardColumn[] = BOARD_COLUMNS.map((column) => ({ ...column, cards: [] }));
   const byKey = new Map(columns.map((column) => [column.key, column]));
 
@@ -285,6 +321,7 @@ export function listBoard(projectId: string): Board | null {
       votes: votesByApp.get(String(row.id)) || [],
       notes: bucket?.notes || [],
       noteCount: bucket?.total || 0,
+      lastMove: lastMoves.get(String(row.id)) || null,
     };
     byKey.get(columnOf(status, shortlist))?.cards.push(card);
   }
@@ -297,7 +334,13 @@ export function listBoard(projectId: string): Board | null {
     byKey
       .get(key)
       ?.cards.push(
-        candidateCard(row, votesByCand.get(row.id) || [], bucket?.notes || [], bucket?.total || 0),
+        candidateCard(
+          row,
+          votesByCand.get(row.id) || [],
+          bucket?.notes || [],
+          bucket?.total || 0,
+          lastMoves.get(row.id) || null,
+        ),
       );
   }
 
@@ -374,9 +417,31 @@ export function addMember(projectId: string, email: string) {
   return found.user;
 }
 
-export function moveCard(applicationId: string, column: BoardColumnKey) {
+/** 단계를 옮긴 사람과 시각을 남긴다. 팀원이 서로의 분류를 확인할 수 있게 하는 기록이다. */
+function recordMove(
+  target: { applicationId?: string; candidateId?: string },
+  userId: string,
+  column: BoardColumnKey,
+) {
+  db()
+    .prepare(
+      `INSERT INTO board_moves (id,application_id,candidate_id,user_id,column_key,created_at)
+       VALUES (?,?,?,?,?,?)`,
+    )
+    .run(
+      randomUUID(),
+      target.applicationId ?? null,
+      target.candidateId ?? null,
+      userId,
+      column,
+      new Date().toISOString(),
+    );
+}
+
+export function moveCard(applicationId: string, column: BoardColumnKey, userId: string) {
   const application = getApplication(applicationId);
   if (!application) return null;
+  recordMove({ applicationId }, userId, column);
   const rescued = HOLD_STATUSES.has(application.status);
   switch (column) {
     case 'final':
@@ -409,6 +474,7 @@ function candidateCard(
   votes: BoardVote[],
   notes: BoardNote[],
   noteCount: number,
+  lastMove: BoardMove | null = null,
 ): BoardCandidateCard {
   const profile = getProfile(row.actor_id);
   const actor = getUserById(row.actor_id);
@@ -426,6 +492,7 @@ function candidateCard(
     votes,
     notes,
     noteCount,
+    lastMove,
     addedBy: { userId: row.added_by, name: adder?.name || '' },
   };
 }
@@ -501,11 +568,13 @@ export function removeCandidate(candidateId: string) {
   return conn.prepare('DELETE FROM project_candidates WHERE id=?').run(candidateId).changes > 0;
 }
 
-export function moveCandidate(candidateId: string, column: BoardColumnKey) {
+export function moveCandidate(candidateId: string, column: BoardColumnKey, userId: string) {
   const result = db()
     .prepare('UPDATE project_candidates SET column_key=? WHERE id=?')
     .run(column, candidateId);
-  return result.changes > 0 ? getCandidate(candidateId) : null;
+  if (result.changes === 0) return null;
+  recordMove({ candidateId }, userId, column);
+  return getCandidate(candidateId);
 }
 
 export function listCandidateVotes(candidateId: string): BoardVote[] {

@@ -2,7 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { hashPassword, passwordProblem, verifyPassword } from '../src/lib/password.ts';
 import { createSessionToken, readSessionToken } from '../src/lib/session-token.ts';
-import { matchesFilters, profileCompletion, cleanList, IMAGE_TAGS } from '../src/lib/profile.ts';
+import {
+  availabilityIn,
+  cleanList,
+  dateRange,
+  IMAGE_TAGS,
+  matchesFilters,
+  MAX_RANGE_DAYS,
+  profileCompletion,
+} from '../src/lib/profile.ts';
 import { embedUrl } from '../src/lib/video.ts';
 import { safeImageRef } from '../src/lib/validation.ts';
 
@@ -116,4 +124,49 @@ test('사진 경로는 업로드 경로나 http(s)만 허용한다', () => {
   );
   assert.equal(safeImageRef('/api/uploads/../../etc/passwd'), '');
   assert.equal(safeImageRef('javascript:alert(1)'), '');
+});
+
+test('기간 날짜 목록은 시작·종료일을 모두 포함하고 최대 일수를 넘지 않는다', () => {
+  assert.deepEqual(dateRange('2026-10-24'), ['2026-10-24']);
+  assert.deepEqual(dateRange('2026-10-24', '2026-10-26'), [
+    '2026-10-24',
+    '2026-10-25',
+    '2026-10-26',
+  ]);
+  // 종료일이 시작일보다 앞서면 하루만 본다
+  assert.deepEqual(dateRange('2026-10-24', '2026-10-20'), ['2026-10-24']);
+  // 달이 바뀌어도 이어진다
+  assert.deepEqual(dateRange('2026-10-31', '2026-11-01'), ['2026-10-31', '2026-11-01']);
+  assert.equal(dateRange('2026-01-01', '2026-12-31').length, MAX_RANGE_DAYS);
+  assert.deepEqual(dateRange('이상한 값'), []);
+});
+
+test('기간 중 며칠 가능한지 세고, 일정 등록 여부를 구분한다', () => {
+  const range = dateRange('2026-10-25', '2026-10-27');
+  const some = availabilityIn(base, range);
+  assert.equal(some.days, 3);
+  assert.deepEqual(some.blocked, ['2026-10-26']);
+  assert.equal(some.registered, true);
+  // 일정을 등록하지 않은 배우는 '가능'이 아니라 '미등록'으로 구분된다
+  const none = availabilityIn({ unavailableDates: [] }, range);
+  assert.deepEqual(none.blocked, []);
+  assert.equal(none.registered, false);
+});
+
+test('기간 검색은 하루도 안 되는 배우만 제외한다', () => {
+  const year = 2026;
+  // 하루만 보는 검색은 예전과 똑같이 동작한다
+  assert.equal(matchesFilters(base, { available: '2026-10-26' }, year), false);
+  assert.equal(matchesFilters(base, { available: '2026-10-27' }, year), true);
+  // 3일 중 하루만 불가하면 조율 여지가 있으니 남긴다
+  assert.equal(
+    matchesFilters(base, { available: '2026-10-25', availableTo: '2026-10-27' }, year),
+    true,
+  );
+  // 기간 전체가 불가한 배우는 제외한다
+  const busy = { ...base, unavailableDates: ['2026-10-25', '2026-10-26'] };
+  assert.equal(
+    matchesFilters(busy, { available: '2026-10-25', availableTo: '2026-10-26' }, year),
+    false,
+  );
 });

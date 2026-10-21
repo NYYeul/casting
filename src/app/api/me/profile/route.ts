@@ -10,6 +10,7 @@ import { getActorId } from '@/lib/auth';
 import {
   cleanList,
   IMAGE_TAGS,
+  MAX_SKILLS,
   MAX_TAGS,
   REGIONS,
   SKILLS,
@@ -69,7 +70,7 @@ export async function PUT(request: NextRequest) {
     region: REGIONS.includes(region) ? region : '',
     intro: requiredText(body.intro, 2000),
     tags: cleanList(body.tags, IMAGE_TAGS, MAX_TAGS),
-    skills: cleanList(body.skills, SKILLS, 12),
+    skills: cleanList(body.skills, SKILLS, MAX_SKILLS),
     photos,
     videoUrl: safeUrl(body.videoUrl),
     filmography,

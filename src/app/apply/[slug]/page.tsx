@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { getProfile, getUserById } from '@/lib/accounts';
+import { getProducerIntro, getProfile, getUserById } from '@/lib/accounts';
 import { getActorId } from '@/lib/auth';
 import { getRole } from '@/lib/db';
 import { ageOf } from '@/lib/profile';
@@ -36,6 +36,8 @@ export default async function ApplyPage({
           .filter(Boolean)
           .join('\n'),
         photoUrl: profile.photos[0] || '',
+        // 프로필에 올려 둔 사진 전부. 공고마다 대표 사진을 바꿔 낼 수 있게 그대로 넘긴다.
+        photos: profile.photos,
         videoUrl: profile.videoUrl,
         skill: profile.skills.join(', '),
         unavailable: profile.unavailableDates.includes(role.shootDate),
@@ -45,6 +47,7 @@ export default async function ApplyPage({
     <ApplyForm
       role={role}
       prefill={prefill}
+      producer={role.ownerId ? getProducerIntro(role.ownerId) : null}
       proposalId={actorId && proposal && /^[\w-]{8,60}$/.test(proposal) ? proposal : ''}
     />
   );

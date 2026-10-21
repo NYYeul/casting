@@ -9,7 +9,13 @@ import {
   recordEvent,
   roleOwnedBy,
 } from '@/lib/db';
-import { requiredText, safeImageRef, safeUrl, validEmail } from '@/lib/validation';
+import {
+  MAX_APPLICATION_PHOTOS,
+  requiredText,
+  safeImageRef,
+  safeUrl,
+  validEmail,
+} from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   const producerId = await getProducerId();
@@ -32,7 +38,14 @@ export async function POST(request: NextRequest) {
   const email = requiredText(body.email, 254).toLowerCase();
   const phone = requiredText(body.phone, 50);
   const introduction = requiredText(body.introduction, 2000);
-  const photoUrl = safeImageRef(body.photoUrl);
+  // 배우가 고른 사진들. 첫 장이 이 공고의 대표 사진이 된다.
+  // 사진 선택 UI가 없는 경로(비로그인 지원)는 photoUrl 하나만 보낸다.
+  const sentPhotos: unknown[] = Array.isArray(body.photoUrls) ? body.photoUrls : [body.photoUrl];
+  const photoUrls = [...new Set(sentPhotos.map(safeImageRef).filter(Boolean))].slice(
+    0,
+    MAX_APPLICATION_PHOTOS,
+  );
+  const photoUrl = photoUrls[0] || '';
   const videoUrl = safeUrl(body.videoUrl);
   const available = requiredText(body.available, 20);
   const travel = requiredText(body.travel, 20);
@@ -63,6 +76,7 @@ export async function POST(request: NextRequest) {
         phone,
         introduction,
         photoUrl,
+        photoUrls,
         videoUrl,
         available,
         travel,

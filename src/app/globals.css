@@ -1217,6 +1217,86 @@ img {
   align-items: flex-end;
   justify-content: center;
 }
+/* 사진 전체화면 보기. 지원자 상세 시트(z-index 30) 위에 떠야 한다. */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #0e0b16f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.lightbox img {
+  max-width: 100%;
+  max-height: calc(100dvh - 92px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #1b1726;
+}
+.lb-close,
+.lb-nav {
+  position: absolute;
+  border: 0;
+  background: #ffffff1f;
+  color: #fff;
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1;
+}
+.lb-close {
+  top: 14px;
+  right: 14px;
+  width: 40px;
+  height: 40px;
+  font-size: 26px;
+}
+.lb-nav {
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  font-size: 30px;
+}
+.lb-prev {
+  left: 10px;
+}
+.lb-next {
+  right: 10px;
+}
+.lb-count {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.lb-hint {
+  position: absolute;
+  bottom: 18px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  color: #ffffffa8;
+  font-size: 12px;
+}
+.lb-failed {
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+  line-height: 1.7;
+}
+.lb-failed a {
+  display: block;
+  color: #cbb8ff;
+  font-weight: 700;
+}
 .detail-sheet {
   width: min(430px, 100%);
   max-height: 92dvh;
@@ -1326,7 +1406,26 @@ img {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  margin-bottom: 17px;
+  margin-bottom: 8px;
+}
+.review-hint {
+  margin: 0 0 15px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+/* 사진을 눌러 전체화면으로 열 수 있다는 걸 알리는 테두리 */
+.avatar-open {
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: zoom-in;
+  border-radius: 14px;
+  flex-shrink: 0;
+}
+.avatar-open:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 .review-buttons button {
   border: 1px solid #e5e0f0;
@@ -1655,6 +1754,80 @@ img {
   text-align: right;
   color: var(--ink);
   font-weight: 600;
+}
+/* 공고를 올린 제작진 정보. 확인된 사실만 적고 '인증' 배지는 쓰지 않는다. */
+.producer-card {
+  margin-top: 12px;
+}
+.producer-card div:last-of-type {
+  border: 0;
+}
+.producer-note {
+  margin: 0 0 14px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+/* 지원서에서 프로필 사진을 골라 내는 자리 */
+.apply-photos {
+  margin: 4px 0 18px;
+}
+.apply-photos-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 9px;
+}
+.apply-photos-head small {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--muted);
+}
+.photo-pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.photo-pick button {
+  position: relative;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--page);
+  aspect-ratio: 3 / 4;
+  cursor: pointer;
+}
+.photo-pick button.on {
+  border-color: var(--primary);
+}
+.photo-pick img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.photo-pick button:not(.on) img {
+  opacity: 0.55;
+}
+.pp-main,
+.pp-order {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 7px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.pp-order {
+  background: #5d5570d9;
 }
 .small-note {
   font-size: 11px;
@@ -2447,6 +2620,44 @@ img {
   color: var(--muted);
   margin-top: 2px;
 }
+.tile-info span.avail-note {
+  margin-top: 5px;
+  font-weight: 700;
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+.avail-ok {
+  color: #1f8a5b;
+}
+.avail-partial {
+  color: #b5700e;
+}
+.avail-unknown {
+  color: var(--muted);
+}
+/* 배우 찾기 ↔ 배우 추천 전환. 추천 화면이 데스크톱 메뉴에만 있어서 모바일에서는 이 줄이 유일한 입구다. */
+.find-switch {
+  display: flex;
+  gap: 6px;
+  background: #f1edfa;
+  border-radius: 12px;
+  padding: 4px;
+  margin: 0 0 14px;
+}
+.find-switch a {
+  flex: 1;
+  text-align: center;
+  padding: 9px 10px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #6b6480;
+}
+.find-switch a.on {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(40, 24, 86, 0.12);
+}
 .tag-row {
   display: flex;
   flex-wrap: wrap;
@@ -2966,6 +3177,55 @@ img {
   background: var(--primary);
   border-color: var(--primary);
   color: #fff;
+}
+.chip-group + .chip-group {
+  margin-top: 14px;
+}
+/* 프로필 PDF로 입력칸을 먼저 채우는 카드 */
+.draft-card h2 small {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--muted);
+}
+.draft-result {
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--page);
+}
+.draft-row {
+  display: grid;
+  grid-template-columns: 20px 78px 1fr;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.draft-row:last-of-type {
+  border-bottom: 0;
+}
+.draft-label {
+  color: var(--muted);
+  font-weight: 700;
+}
+.draft-value {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.draft-source {
+  grid-column: 3;
+  color: var(--faint, #a39bb5);
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+.chip-group-label {
+  margin: 0 0 7px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #8d86a0;
 }
 .filmo-row {
   display: grid;

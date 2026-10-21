@@ -13,6 +13,9 @@ export function safeUrl(value: unknown) {
   }
 }
 
+/** 지원서 한 건에 넣을 수 있는 사진 수 (프로필 사진 보관 한도와 같다) */
+export const MAX_APPLICATION_PHOTOS = 8;
+
 export const UPLOAD_PATTERN = /^\/api\/uploads\/[a-f0-9-]{36}\.(jpg|png|webp|pdf)$/;
 const AVATAR_PATTERN = /^\/avatars\/p\d{2}\.svg$/;
 

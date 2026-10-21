@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listFavoriteIds, listPublicProfiles } from '@/lib/accounts';
 import { getProducerId } from '@/lib/auth';
-import { ageOf, matchesFilters, type ActorFilters } from '@/lib/profile';
+import { ageOf, availabilityIn, dateRange, matchesFilters, type ActorFilters } from '@/lib/profile';
 
 function num(value: string | null) {
   const parsed = Number(value);
   return value && Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function date(value: string | null) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? value! : undefined;
 }
 
 function intParam(value: string | null, min: number, max: number, fallback: number) {
@@ -30,11 +34,12 @@ export async function GET(request: NextRequest) {
     region: params.get('region') || undefined,
     skill: params.get('skill') || undefined,
     tag: params.get('tag') || undefined,
-    available: /^\d{4}-\d{2}-\d{2}$/.test(params.get('available') || '')
-      ? params.get('available')!
-      : undefined,
+    available: date(params.get('available')),
+    availableTo: date(params.get('availableTo')),
     ids: params.get('favorites') === '1' ? favorites : undefined,
   };
+  // 기간 검색이 걸려 있으면 날짜별 가능 여부를 함께 돌려줘서 '전체 가능 / 일부 가능'을 나눠 보여 준다.
+  const range = filters.available ? dateRange(filters.available, filters.availableTo) : [];
   const sort = params.get('sort');
   const limit = intParam(params.get('limit'), 1, 50, 20);
   const offset = intParam(params.get('offset'), 0, Number.MAX_SAFE_INTEGER, 0);
@@ -46,14 +51,21 @@ export async function GET(request: NextRequest) {
     .filter(
       (profile) => matchesFilters(profile, filters) && profile.filmography.length >= careerMin,
     )
-    .sort((a, b) =>
-      sort === 'name'
-        ? a.name.localeCompare(b.name, 'ko')
-        : sort === 'age'
-          ? (ageOf(a.birthYear) ?? 99) - (ageOf(b.birthYear) ?? 99)
-          : b.updatedAt.localeCompare(a.updatedAt),
-    )
-    .map((profile) => ({ ...profile, favorite: favorites.includes(profile.userId) }));
+    .map((profile) => ({
+      ...profile,
+      favorite: favorites.includes(profile.userId),
+      availability: range.length > 0 ? availabilityIn(profile, range) : null,
+    }))
+    // 기간을 모두 소화할 수 있는 배우를 먼저 보여 준다. 그 다음은 고른 정렬 기준을 따른다.
+    .sort(
+      (a, b) =>
+        (a.availability?.blocked.length ?? 0) - (b.availability?.blocked.length ?? 0) ||
+        (sort === 'name'
+          ? a.name.localeCompare(b.name, 'ko')
+          : sort === 'age'
+            ? (ageOf(a.birthYear) ?? 99) - (ageOf(b.birthYear) ?? 99)
+            : b.updatedAt.localeCompare(a.updatedAt)),
+    );
   const results = actors.slice(offset, offset + limit);
   return NextResponse.json(
     {

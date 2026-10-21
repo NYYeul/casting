@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import type { ProducerIntro } from '@/lib/accounts';
 import type { Role } from '@/lib/types';
 import { saveReceipt } from '@/lib/receipts';
+import { MAX_APPLICATION_PHOTOS } from '@/lib/validation';
 
 export type Prefill = {
   name: string;
@@ -12,6 +14,7 @@ export type Prefill = {
   age: number | null;
   introduction: string;
   photoUrl: string;
+  photos: string[];
   videoUrl: string;
   skill: string;
   unavailable: boolean;
@@ -20,10 +23,12 @@ export type Prefill = {
 export default function ApplyForm({
   role,
   prefill,
+  producer,
   proposalId,
 }: {
   role: Role;
   prefill: Prefill | null;
+  producer: ProducerIntro | null;
   proposalId: string;
 }) {
   const [step, setStep] = useState<'brief' | 'form'>('brief');
@@ -31,7 +36,20 @@ export default function ApplyForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [online, setOnline] = useState(true);
+  // 프로필 사진 중 이 공고에 낼 사진. 첫 번째가 대표 사진이 된다.
+  const [picked, setPicked] = useState<string[]>(prefill?.photos.slice(0, 1) ?? []);
   const closed = role.isClosed || role.deadline < new Date().toISOString().slice(0, 10);
+
+  /** 고르면 뒤에 붙고, 이미 고른 사진을 누르면 빠진다. 남은 첫 장이 대표 사진이 된다. */
+  function togglePhoto(url: string) {
+    setPicked((current) =>
+      current.includes(url)
+        ? current.filter((item) => item !== url)
+        : current.length >= MAX_APPLICATION_PHOTOS
+          ? current
+          : [...current, url],
+    );
+  }
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -69,7 +87,13 @@ export default function ApplyForm({
       const response = await fetch('/api/applications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...body, roleSlug: role.slug, proposalId }),
+        body: JSON.stringify({
+          ...body,
+          // 프로필에서 고른 사진이 있으면 그걸 쓰고, 없으면 직접 넣은 사진 링크를 쓴다.
+          photoUrls: picked.length > 0 ? picked : [body.photoUrl].filter(Boolean),
+          roleSlug: role.slug,
+          proposalId,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '접수하지 못했습니다.');
@@ -154,9 +178,52 @@ export default function ApplyForm({
               <strong>{role.announcementDate}</strong>
             </div>
           </section>
-          <p className="small-note">
-            담당: {role.contactName} · 지원 후 접수 상태를 확인할 수 있습니다.
-          </p>
+          <section className="brief-card producer-card">
+            <h3>이 공고를 올린 제작진</h3>
+            <div>
+              <span>담당</span>
+              <strong>{role.contactName || '미기재'}</strong>
+            </div>
+            {producer ? (
+              <>
+                <div>
+                  <span>등록자</span>
+                  <strong>
+                    {producer.name}
+                    {producer.orgName ? ` · ${producer.orgName}` : ''}
+                  </strong>
+                </div>
+                <div>
+                  <span>소속 유형</span>
+                  <strong>{producer.orgType || '미기재'}</strong>
+                </div>
+                <div>
+                  <span>올린 공고</span>
+                  <strong>
+                    {producer.totalRoles}개
+                    {producer.totalRoles > 1 && ` · 모집 중 ${producer.openRoles}개`}
+                  </strong>
+                </div>
+                <div>
+                  <span>가입</span>
+                  <strong>
+                    {producer.memberSince.slice(0, 4)}년 {Number(producer.memberSince.slice(5, 7))}
+                    월
+                  </strong>
+                </div>
+                <p className="producer-note">
+                  위 내용은 제작자가 직접 등록한 정보입니다. 재학·사업자 확인 절차는 아직 없어서
+                  인증 표시는 붙이지 않습니다. 출연료·촬영 조건은 꼭 담당자와 직접 확인해 주세요.
+                </p>
+              </>
+            ) : (
+              <p className="producer-note">
+                이 공고는 계정에 연결되지 않은 공고입니다. 제작진 정보를 담당자에게 직접 확인해
+                주세요.
+              </p>
+            )}
+          </section>
+          <p className="small-note">지원 후 접수 상태를 확인할 수 있습니다.</p>
           <button
             className="button button-primary full sticky-action"
             onClick={begin}
@@ -244,16 +311,58 @@ export default function ApplyForm({
                 placeholder="출연작, 연기 경험, 이 배역에 전하고 싶은 내용을 적어 주세요"
               />
             </label>
-            <label>
-              사진 링크
-              <input
-                name="photoUrl"
-                inputMode="url"
-                defaultValue={prefill?.photoUrl}
-                placeholder="https://... (선택)"
-              />
-              <small>공유 가능한 프로필 사진 링크를 넣어 주세요.</small>
-            </label>
+            {prefill && prefill.photos.length > 0 ? (
+              <div className="apply-photos">
+                <span className="apply-photos-head">
+                  이 공고에 낼 사진
+                  <small>
+                    {picked.length > 0
+                      ? `${picked.length}장 선택 · 첫 번째가 대표 사진`
+                      : '한 장 이상 골라 주세요'}
+                  </small>
+                </span>
+                <div className="photo-pick">
+                  {prefill.photos.map((url) => {
+                    const order = picked.indexOf(url);
+                    return (
+                      <button
+                        key={url}
+                        type="button"
+                        aria-pressed={order >= 0}
+                        className={order >= 0 ? 'on' : ''}
+                        onClick={() => togglePhoto(url)}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="" />
+                        {order === 0 && <b className="pp-main">대표</b>}
+                        {order > 0 && <b className="pp-order">{order + 1}</b>}
+                      </button>
+                    );
+                  })}
+                </div>
+                <small className="muted">
+                  프로필에 올려 둔 사진이에요. 배역 느낌에 맞는 사진을 골라 공고마다 다르게 낼 수
+                  있어요.{' '}
+                  <Link href="/me/profile#photos" className="text-button">
+                    사진 추가·수정
+                  </Link>
+                </small>
+              </div>
+            ) : (
+              <label>
+                사진 링크
+                <input
+                  name="photoUrl"
+                  inputMode="url"
+                  defaultValue={prefill?.photoUrl}
+                  placeholder="https://... (선택)"
+                />
+                <small>
+                  공유 가능한 프로필 사진 링크를 넣어 주세요. 회원으로 로그인하면 프로필에 올린
+                  사진에서 바로 고를 수 있어요.
+                </small>
+              </label>
+            )}
             <label>
               연기 영상 링크 <em>필수</em>
               <input

@@ -129,9 +129,21 @@ function db() {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS candidate_notes_app ON candidate_notes(candidate_id, created_at);
+    -- 팀 보드의 단계는 팀 전체가 함께 보는 값이라, 누가 언제 옮겼는지 남겨 둬야
+    -- '이 사람을 왜 보류로 뒀는지'를 팀원끼리 확인할 수 있다.
+    CREATE TABLE IF NOT EXISTS board_moves (
+      id TEXT PRIMARY KEY, application_id TEXT, candidate_id TEXT,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      column_key TEXT NOT NULL, created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS board_moves_app ON board_moves(application_id, created_at);
+    CREATE INDEX IF NOT EXISTS board_moves_cand ON board_moves(candidate_id, created_at);
   `);
   addColumn(database, 'applications', 'chat_open', 'INTEGER NOT NULL DEFAULT 0');
   addColumn(database, 'applications', 'actor_id', 'TEXT');
+  // 배우가 공고마다 다른 사진으로 지원할 수 있게 고른 사진 전부를 담는다.
+  // photo_url은 그중 대표 사진이고, 예전 지원서와의 호환을 위해 그대로 둔다.
+  addColumn(database, 'applications', 'photo_urls', "TEXT NOT NULL DEFAULT '[]'");
   addColumn(database, 'roles', 'owner_id', 'TEXT');
   addColumn(database, 'roles', 'project_id', 'TEXT');
   addColumn(database, 'actor_profiles', 'agency', "TEXT NOT NULL DEFAULT ''");
@@ -181,7 +193,20 @@ function roleFromRow(row: Record<string, unknown>): Role {
   };
 }
 
+/** JSON 문자열로 저장된 문자열 목록. 예전 행이나 깨진 값은 빈 목록으로 본다. */
+function stringList(value: unknown): string[] {
+  if (typeof value !== 'string' || !value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 function appFromRow(row: Record<string, unknown>): Application {
+  const photoUrl = String(row.photo_url);
+  const photoUrls = stringList(row.photo_urls);
   return {
     id: String(row.id),
     roleId: String(row.role_id),
@@ -190,7 +215,9 @@ function appFromRow(row: Record<string, unknown>): Application {
     email: String(row.email),
     phone: String(row.phone),
     introduction: String(row.introduction),
-    photoUrl: String(row.photo_url),
+    photoUrl,
+    // 사진을 여러 장 고르기 전에 들어온 지원서는 대표 사진 하나만 가지고 있다.
+    photoUrls: photoUrls.length > 0 ? photoUrls : photoUrl ? [photoUrl] : [],
     videoUrl: String(row.video_url),
     available: String(row.available),
     travel: String(row.travel),
@@ -433,6 +460,7 @@ export type NewApplication = Pick<
   | 'phone'
   | 'introduction'
   | 'photoUrl'
+  | 'photoUrls'
   | 'videoUrl'
   | 'available'
   | 'travel'
@@ -450,8 +478,8 @@ export function createApplication(
   const now = new Date().toISOString();
   db()
     .prepare(
-      `INSERT INTO applications (id,role_id,actor_id,name,age,email,phone,introduction,photo_url,video_url,available,travel,pay_accepted,skill,receipt_token,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO applications (id,role_id,actor_id,name,age,email,phone,introduction,photo_url,photo_urls,video_url,available,travel,pay_accepted,skill,receipt_token,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     )
     .run(
       id,
@@ -463,6 +491,7 @@ export function createApplication(
       input.phone,
       input.introduction,
       input.photoUrl,
+      JSON.stringify(input.photoUrls),
       input.videoUrl,
       input.available,
       input.travel,
@@ -640,13 +669,16 @@ function seedDemo(connection: DatabaseSync) {
     ['한지민', 24, '웹드라마 주연, 단편 1편', 'unsure', 'new', 25],
   ] as const;
   for (const [name, age, introduction, available, status, photo] of examples) {
+    const avatar = (offset: number) =>
+      `/avatars/p${String(((photo - 1 + offset) % 20) + 1).padStart(2, '0')}.svg`;
     const application = createApplication(role.id, {
       name,
       age,
       email: `${randomBytes(4).toString('hex')}@example.com`,
       phone: '010-0000-0000',
       introduction,
-      photoUrl: `/avatars/p${String(((photo - 1) % 20) + 1).padStart(2, '0')}.svg`,
+      photoUrl: avatar(0),
+      photoUrls: [avatar(0), avatar(1), avatar(2)],
       videoUrl: 'https://example.com/showreel',
       available,
       travel: 'yes',

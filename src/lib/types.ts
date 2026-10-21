@@ -31,7 +31,10 @@ export type Application = {
   email: string;
   phone: string;
   introduction: string;
+  /** 대표 사진 (photoUrls의 첫 장) */
   photoUrl: string;
+  /** 이 공고에 내려고 고른 사진 전부 */
+  photoUrls: string[];
   videoUrl: string;
   available: string;
   travel: string;
