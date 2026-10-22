@@ -26,6 +26,8 @@ export type Role = {
 export type Application = {
   id: string;
   roleId: string;
+  /** 로그인하고 지원했거나 나중에 계정에 연결된 경우의 배우 id (비로그인 지원은 null) */
+  actorId: string | null;
   name: string;
   age: number | null;
   email: string;

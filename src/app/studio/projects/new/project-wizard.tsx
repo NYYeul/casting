@@ -203,6 +203,9 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
               }
             </p>
             <div className="role-form">
+              <p className="form-legend">
+                <em>*</em> 표시는 꼭 채워야 하는 항목이에요. 나머지는 나중에 채워도 됩니다.
+              </p>
               {step === 0 && (
                 <>
                   <label>
@@ -215,7 +218,7 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
                   </label>
                   <div className="form-two">
                     <label>
-                      장르
+                      장르 <i>선택</i>
                       <select value={draft.genre} onChange={set('genre')}>
                         {GENRES.map((genre) => (
                           <option key={genre}>{genre}</option>
@@ -237,12 +240,12 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
                       <input type="date" value={draft.shootStart} onChange={set('shootStart')} />
                     </label>
                     <label>
-                      촬영 종료일
+                      촬영 종료일 <i>선택</i>
                       <input type="date" value={draft.shootEnd} onChange={set('shootEnd')} />
                     </label>
                   </div>
                   <label>
-                    작품 소개
+                    작품 소개 <i>선택</i>
                     <textarea
                       rows={4}
                       value={draft.description}
@@ -291,7 +294,8 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
                         />
                       </label>
                       <label>
-                        필수 조건
+                        {/* 항목 이름에 '필수'가 들어가 있어서, 입력 자체는 선택이라는 걸 따로 적어 준다 */}
+                        지원 필수 조건 <i>선택</i>
                         <input
                           value={role.requirement}
                           onChange={(event) => setRole(index, 'requirement', event.target.value)}

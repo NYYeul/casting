@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import ActorNav from '@/components/actor-nav';
+import RecentStrip from '@/components/recent-strip';
+import { RECENT_ROLES } from '@/lib/recent';
 import { getProfile, listActorProposals } from '@/lib/accounts';
 import { getCurrentUser } from '@/lib/auth';
 import { listActorApplications, listOpenRoles } from '@/lib/db';
@@ -117,6 +119,8 @@ export default async function ActorHome() {
             </Link>
           ))
         )}
+
+        <RecentStrip storageKey={RECENT_ROLES} title="최근 본 공고" unit="개" />
 
         <div className="section-head">
           <h2>모집 중인 배역</h2>

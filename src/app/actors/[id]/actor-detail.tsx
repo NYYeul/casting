@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ProducerNav from '@/components/producer-nav';
 import type { ActorProfileFull } from '@/lib/accounts';
 import { ageOf, genderLabel } from '@/lib/profile';
+import { pushRecent, RECENT_ACTORS } from '@/lib/recent';
 import { embedUrl } from '@/lib/video';
 
 type Tab = 'intro' | 'video' | 'filmo' | 'photos' | 'docs';
@@ -35,6 +36,20 @@ export default function ActorDetail({
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const age = ageOf(profile.birthYear);
+
+  // 제작자가 본 배우만 '최근 본 배우'에 남긴다 (배우가 자기 프로필을 미리볼 때는 제외).
+  useEffect(() => {
+    if (viewer !== 'producer') return;
+    pushRecent(RECENT_ACTORS, {
+      id: profile.userId,
+      name: profile.name,
+      sub: [ageOf(profile.birthYear) ? `${ageOf(profile.birthYear)}세` : '', profile.region]
+        .filter(Boolean)
+        .join(' · '),
+      photo: profile.photos[0] || '',
+      href: `/actors/${profile.userId}`,
+    });
+  }, [viewer, profile.userId, profile.name, profile.region, profile.birthYear, profile.photos]);
   const embed = profile.videoUrl ? embedUrl(profile.videoUrl) : null;
   const available = roles.filter((role) => !proposed.includes(role.id));
   const proposedLabels = roles

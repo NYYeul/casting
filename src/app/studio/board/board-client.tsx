@@ -53,6 +53,15 @@ type BoardData = {
   columns: Column[];
 };
 
+/**
+ * 카드 정렬. 기본은 보드가 내려준 순서(최신 지원순)이고,
+ * '하트순'을 고르면 팀원 지지가 많은 사람이 위로 온다. 하트 수가 같으면 원래 순서를 지킨다.
+ */
+function sortCards(cards: Card[], sort: 'recent' | 'votes'): Card[] {
+  if (sort === 'recent') return cards;
+  return [...cards].sort((a, b) => b.votes.length - a.votes.length);
+}
+
 /** '방금', '3시간 전', '10/21' 처럼 이동 시각을 짧게 적는다. */
 function moveAgo(at: string) {
   const minutes = Math.floor((Date.now() - Date.parse(at)) / 60000);
@@ -141,6 +150,8 @@ export default function BoardClient({ meId }: { meId: string }) {
   const [pickerResults, setPickerResults] = useState<ActorResult[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
   const [editingNote, setEditingNote] = useState<{ id: string; text: string } | null>(null);
+  // 카드 정렬. 자동으로 바꾸지 않고 눌렀을 때만 바뀐다 — 보는 중에 카드가 혼자 움직이면 헷갈린다.
+  const [sort, setSort] = useState<'recent' | 'votes'>('recent');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((message: string) => {
@@ -535,6 +546,28 @@ export default function BoardClient({ meId }: { meId: string }) {
               </div>
             )}
 
+            {!boardLoading && board && (
+              <div className={styles.sortRow} role="group" aria-label="카드 정렬">
+                <span>정렬</span>
+                {(
+                  [
+                    ['recent', '최신 지원순'],
+                    ['votes', '하트순'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={sort === key}
+                    className={sort === key ? styles.on : ''}
+                    onClick={() => setSort(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {boardLoading && <p className={styles.boardLoading}>보드를 불러오는 중…</p>}
             {!boardLoading && board && (
               <div className={styles.board}>
@@ -556,10 +589,10 @@ export default function BoardClient({ meId }: { meId: string }) {
                       <h2>{column.title}</h2>
                       <span className={styles.columnCount}>{column.cards.length}</span>
                     </header>
-                    {column.cards.length === 0 && (
+                    {sortCards(column.cards, sort).length === 0 && (
                       <div className={styles.emptyCol}>카드가 없습니다</div>
                     )}
-                    {column.cards.map((card) => {
+                    {sortCards(column.cards, sort).map((card) => {
                       const id = cardRefId(card);
                       const removable =
                         card.kind === 'candidate' && (isOwner || card.addedBy.userId === meId);

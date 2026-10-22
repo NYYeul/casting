@@ -14,7 +14,9 @@ import {
 } from '@/lib/compare';
 import styles from './compare.module.css';
 
-type Source = 'role' | 'favorites' | 'actors';
+type Source = 'role' | 'passed' | 'final' | 'favorites' | 'actors';
+/** 지원자에서 뽑는 소스 — 배역을 하나 골라야 한다 */
+const ROLE_SOURCES: Source[] = ['role', 'passed', 'final'];
 type Stage = 'setup' | 'match' | 'done';
 
 type Candidate = {
@@ -24,15 +26,28 @@ type Candidate = {
   photo: string;
   intro: string;
   meta: string;
+  gender: string;
 };
 
 type RoleOption = { id: string; title: string; projectTitle: string };
 type SavedResult = { id: string; title: string; winnerLabel: string; createdAt: string };
 
 const SOURCES: { key: Source; label: string; hint: string }[] = [
-  { key: 'role', label: '지원자', hint: '제외 처리된 지원자는 빼고 비교합니다.' },
+  { key: 'role', label: '지원자 전체', hint: '제외 처리된 지원자는 빼고 비교합니다.' },
+  {
+    key: 'passed',
+    label: '1차 합격',
+    hint: '팀 보드에서 1차 합격으로 옮긴 지원자끼리 비교합니다.',
+  },
+  { key: 'final', label: '최종 후보', hint: '오디션 후보로 올린 지원자끼리 비교합니다.' },
   { key: 'favorites', label: '관심 배우', hint: '찜해 둔 배우들끼리 비교합니다.' },
   { key: 'actors', label: '전체 배우', hint: '공개 프로필 배우 전체가 대상입니다.' },
+];
+
+const GENDERS: [string, string][] = [
+  ['', '구분 없음'],
+  ['female', '여성만'],
+  ['male', '남성만'],
 ];
 
 const PICK_DELAY_MS = 380;
@@ -55,6 +70,9 @@ export default function CompareClient() {
 
   // ── 설정 단계 상태 ──────────────────────────────
   const [source, setSource] = useState<Source>('role');
+  // 배역에 성별이 정해져 있는 경우가 많아, 반대 성별을 빼고 비교할 수 있게 한다.
+  const [gender, setGender] = useState('');
+  const [unknownGender, setUnknownGender] = useState(0);
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [roleId, setRoleId] = useState('');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -110,7 +128,8 @@ export default function CompareClient() {
     setCandidates([]);
     try {
       const params = new URLSearchParams({ source });
-      if (source === 'role') params.set('roleId', roleId);
+      if (ROLE_SOURCES.includes(source)) params.set('roleId', roleId);
+      if (gender) params.set('gender', gender);
       const response = await fetch(`/api/compare?${params}`, { cache: 'no-store' });
       if (response.status === 401) {
         location.href = '/login?next=/studio/compare';
@@ -120,13 +139,14 @@ export default function CompareClient() {
       if (!response.ok) throw new Error(data.error || '후보를 불러오지 못했습니다.');
       const list: Candidate[] = data.candidates;
       setCandidates(list);
+      setUnknownGender(Number(data.unknownGender) || 0);
       setChecked(new Set(list.map((candidate) => candidate.id)));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '후보를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
-  }, [source, roleId]);
+  }, [source, roleId, gender]);
 
   function toggle(id: string) {
     setChecked((current) => {
@@ -151,7 +171,7 @@ export default function CompareClient() {
       setActionDone(false);
       setNotice('');
       setTitle(
-        `${source === 'role' ? (roles.find((r) => r.id === roleId)?.title ?? '지원자') : '배우'} 월드컵 ${new Date()
+        `${ROLE_SOURCES.includes(source) ? (roles.find((r) => r.id === roleId)?.title ?? '지원자') : '배우'} 월드컵 ${new Date()
           .toISOString()
           .slice(0, 10)}`,
       );
@@ -201,7 +221,7 @@ export default function CompareClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: title.trim() || `${winner.name} 월드컵`,
-          roleId: source === 'role' ? roleId : undefined,
+          roleId: ROLE_SOURCES.includes(source) ? roleId : undefined,
           bracket: state,
           winnerLabel: winner.name,
         }),
@@ -221,7 +241,7 @@ export default function CompareClient() {
   async function winnerAction() {
     if (!winner || actionDone) return;
     try {
-      if (source === 'role') {
+      if (ROLE_SOURCES.includes(source)) {
         const response = await fetch(`/api/applications/${winner.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -280,7 +300,7 @@ export default function CompareClient() {
                   </button>
                 ))}
               </div>
-              {source === 'role' ? (
+              {ROLE_SOURCES.includes(source) ? (
                 <select
                   className={styles.select}
                   aria-label="배역 선택"
@@ -294,17 +314,38 @@ export default function CompareClient() {
                     </option>
                   ))}
                 </select>
-              ) : (
-                <p className={styles.hint}>{SOURCES.find((s) => s.key === source)?.hint}</p>
-              )}
+              ) : null}
+              <p className={styles.hint}>{SOURCES.find((s) => s.key === source)?.hint}</p>
+              <p className={styles.panelTitle}>성별</p>
+              <div className={styles.sourceRow} role="radiogroup" aria-label="성별">
+                {GENDERS.map(([value, label]) => (
+                  <button
+                    key={value || 'all'}
+                    className={`${styles.sourceChip}${gender === value ? ` ${styles.on}` : ''}`}
+                    onClick={() => setGender(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className={styles.hint}>
+                성별을 고르면 반대 성별만 빠집니다. 성별을 알 수 없는 후보(비로그인 지원 등)는
+                그대로 남습니다.
+              </p>
               <button
                 className="button button-soft full"
-                disabled={loading || (source === 'role' && !roleId)}
+                disabled={loading || (ROLE_SOURCES.includes(source) && !roleId)}
                 onClick={() => void loadCandidates()}
               >
                 {loading ? '불러오는 중…' : '후보 불러오기'}
               </button>
               {error && <p className="form-error">{error}</p>}
+              {gender && unknownGender > 0 && (
+                <p className={styles.hint}>
+                  성별을 알 수 없는 후보 {unknownGender}명도 함께 있습니다. 아래 목록에서 빼실 수
+                  있어요.
+                </p>
+              )}
             </div>
 
             {candidates.length > 0 && (
@@ -449,7 +490,11 @@ export default function CompareClient() {
                   disabled={actionDone}
                   onClick={() => void winnerAction()}
                 >
-                  {actionDone ? '완료 ✓' : source === 'role' ? '관심으로 표시' : '관심 배우로 저장'}
+                  {actionDone
+                    ? '완료 ✓'
+                    : ROLE_SOURCES.includes(source)
+                      ? '관심으로 표시'
+                      : '관심 배우로 저장'}
                 </button>
               </div>
               {notice && <p className={styles.notice}>{notice}</p>}

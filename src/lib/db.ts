@@ -210,6 +210,7 @@ function appFromRow(row: Record<string, unknown>): Application {
   return {
     id: String(row.id),
     roleId: String(row.role_id),
+    actorId: row.actor_id ? String(row.actor_id) : null,
     name: String(row.name),
     age: row.age === null ? null : Number(row.age),
     email: String(row.email),

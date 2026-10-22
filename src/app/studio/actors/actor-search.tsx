@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import FindSwitch from '@/components/find-switch';
 import ProducerNav from '@/components/producer-nav';
+import RecentStrip from '@/components/recent-strip';
+import { RECENT_ACTORS } from '@/lib/recent';
 import type { ActorProfileFull } from '@/lib/accounts';
 import {
   ageOf,
@@ -317,6 +319,7 @@ export default function ActorSearch() {
           <span className="count-pill">{loading ? '…' : `${total}명의 배우`}</span>
         </div>
         <FindSwitch active="search" />
+        <RecentStrip storageKey={RECENT_ACTORS} title="최근 본 배우" unit="명" />
         <div className="search-row">
           <div className="search-box">
             <svg

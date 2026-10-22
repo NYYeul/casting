@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { ProducerIntro } from '@/lib/accounts';
 import type { Role } from '@/lib/types';
 import { saveReceipt } from '@/lib/receipts';
+import { pushRecent, RECENT_ROLES } from '@/lib/recent';
 import { MAX_APPLICATION_PHOTOS } from '@/lib/validation';
 
 export type Prefill = {
@@ -61,6 +62,17 @@ export default function ApplyForm({
       window.removeEventListener('offline', update);
     };
   }, []);
+
+  // 본 공고를 '최근 본 공고'에 남긴다 (지원하지 않고 닫아도 다시 찾아갈 수 있게).
+  useEffect(() => {
+    pushRecent(RECENT_ROLES, {
+      id: role.id,
+      name: role.projectTitle,
+      sub: `${role.title} · ${role.location}`,
+      photo: `https://picsum.photos/seed/${role.slug}/120/120`,
+      href: `/apply/${role.slug}`,
+    });
+  }, [role.id, role.projectTitle, role.title, role.location, role.slug]);
 
   function begin() {
     setStep('form');

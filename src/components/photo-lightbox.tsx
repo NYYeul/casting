@@ -58,6 +58,13 @@ export default function PhotoLightbox({
       aria-label={`${name} 프로필 사진`}
       onClick={onClose}
     >
+      {/* 같은 사진을 크게 흐려 깔아 배경을 만든다 (인스타그램 보기와 같은 방식) */}
+      {!failed && (
+        <div
+          className="lb-blur"
+          style={{ backgroundImage: `url("${url.replace(/["\\]/g, '\\$&')}")` }}
+        />
+      )}
       <button className="lb-close" onClick={onClose} aria-label="사진 닫기">
         ×
       </button>
@@ -74,13 +81,11 @@ export default function PhotoLightbox({
           </a>
         </p>
       ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={url}
-          alt={`${name} 프로필 사진 ${index + 1}`}
-          onClick={(event) => event.stopPropagation()}
-          onError={() => setFailed(true)}
-        />
+        <figure className="lb-card" onClick={(event) => event.stopPropagation()}>
+          <figcaption className="lb-name">{name}</figcaption>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt={`${name} 프로필 사진 ${index + 1}`} onError={() => setFailed(true)} />
+        </figure>
       )}
       {count > 1 && (
         <>
