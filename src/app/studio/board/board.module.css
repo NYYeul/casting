@@ -372,6 +372,17 @@
   border-color: #f6c3d2;
   background: #fff5f8;
 }
+/* 카드에서 상세 패널을 여는 버튼 */
+.detailBtn {
+  border: 1px solid var(--line, #e5e0f0);
+  background: #fff;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #6f6a80;
+  cursor: pointer;
+}
 /* 카드 정렬 고르기 */
 .sortRow {
   display: flex;

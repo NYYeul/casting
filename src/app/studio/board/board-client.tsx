@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import PhotoLightbox from '@/components/photo-lightbox';
 import ProducerNav from '@/components/producer-nav';
 import { ageOf } from '@/lib/profile';
 import styles from './board.module.css';
@@ -13,6 +14,34 @@ type Vote = { userId: string; name: string };
 type Note = { id: string; body: string; userId: string; name: string; createdAt: string };
 /** 단계는 팀 공유 값이라, 마지막으로 옮긴 사람을 카드에 적어 준다. */
 type Move = { userId: string; name: string; column: ColumnKey; at: string };
+/** 상세 패널에서 보여 줄 지원서 전체 내용 */
+type AppDetail = {
+  name: string;
+  age: number | null;
+  email: string;
+  phone: string;
+  introduction: string;
+  photoUrls: string[];
+  videoUrl: string;
+  available: string;
+  travel: string;
+  payAccepted: string;
+  skill: string;
+  createdAt: string;
+};
+
+const CONDITION: Record<string, string> = {
+  yes: '가능',
+  no: '불가',
+  unsure: '확인 필요',
+};
+
+/** 상세 패널에서 쓸 사진들. 지원서를 받아왔으면 고른 사진 전부, 아니면 카드의 사진 한 장. */
+function detailPhotos(detail: { card: Card; application: AppDetail | null }): string[] {
+  const fromApplication = detail.application?.photoUrls ?? [];
+  if (fromApplication.length > 0) return fromApplication;
+  return detail.card.photo ? [detail.card.photo] : [];
+}
 type CardBase = {
   name: string;
   age: number | null;
@@ -152,6 +181,32 @@ export default function BoardClient({ meId }: { meId: string }) {
   const [editingNote, setEditingNote] = useState<{ id: string; text: string } | null>(null);
   // 카드 정렬. 자동으로 바꾸지 않고 눌렀을 때만 바뀐다 — 보는 중에 카드가 혼자 움직이면 헷갈린다.
   const [sort, setSort] = useState<'recent' | 'votes'>('recent');
+  // 보드를 떠나지 않고 보는 상세 패널. 지원서는 서버에서 전체 내용을 받아 온다.
+  const [detail, setDetail] = useState<{ card: Card; application: AppDetail | null } | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailPhotoAt, setDetailPhotoAt] = useState<number | null>(null);
+
+  async function openDetail(card: Card) {
+    setDetail({ card, application: null });
+    setDetailPhotoAt(null);
+    if (card.kind !== 'application') return;
+    setDetailLoading(true);
+    try {
+      const result = await api<{ application: AppDetail }>(
+        `/api/applications/${card.applicationId}`,
+      );
+      // 그 사이 다른 카드를 열었으면 덮어쓰지 않는다
+      setDetail((current) =>
+        current && cardRefId(current.card) === cardRefId(card)
+          ? { ...current, application: result.application }
+          : current,
+      );
+    } catch (reason) {
+      showToast(reason instanceof Error ? reason.message : '상세를 불러오지 못했습니다.');
+    } finally {
+      setDetailLoading(false);
+    }
+  }
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((message: string) => {
@@ -709,6 +764,13 @@ export default function BoardClient({ meId }: { meId: string }) {
                             >
                               메모 {card.noteCount}
                             </button>
+                            {/* 카드 전체가 드래그 대상이라, 상세 보기는 버튼으로만 연다 */}
+                            <button
+                              className={styles.detailBtn}
+                              onClick={() => void openDetail(card)}
+                            >
+                              상세
+                            </button>
                           </div>
                           {openThreads.has(id) && (
                             <div className={styles.noteThread}>
@@ -878,6 +940,143 @@ export default function BoardClient({ meId }: { meId: string }) {
           </section>
         </div>
       )}
+      {/* 보드 위에 띄우는 상세 패널. 다른 화면으로 넘어가면 칸반 맥락이 끊겨서 여기서 바로 본다. */}
+      {detail && (
+        <div className="sheet-backdrop" onClick={() => setDetail(null)}>
+          <section
+            className="detail-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${detail.card.name} 상세`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sheet-handle" />
+            <div className="sheet-title">
+              <span>{detail.card.kind === 'application' ? '지원자 상세' : '후보 배우'}</span>
+              <button onClick={() => setDetail(null)} aria-label="닫기">
+                ×
+              </button>
+            </div>
+
+            <div className="detail-profile">
+              {detailPhotos(detail).length > 0 ? (
+                <button
+                  className="avatar-open"
+                  onClick={() => setDetailPhotoAt(0)}
+                  aria-label={`${detail.card.name} 사진 크게 보기`}
+                >
+                  <span className="avatar avatar-large">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={detailPhotos(detail)[0]} alt="" />
+                  </span>
+                </button>
+              ) : (
+                <span className="avatar avatar-large">{initials(detail.card.name)}</span>
+              )}
+              <div>
+                <h2>
+                  {detail.card.name} <small>{detail.card.age ? `(${detail.card.age})` : ''}</small>
+                </h2>
+                <p>
+                  {detail.card.kind === 'application'
+                    ? (detail.application?.introduction ?? detail.card.intro)
+                    : detail.card.intro}
+                </p>
+                <span>
+                  {detail.card.kind === 'application'
+                    ? detail.card.roleTitle
+                    : detail.card.meta || '등록 배우'}
+                </span>
+              </div>
+            </div>
+
+            {detailLoading && <p className={styles.boardLoading}>상세를 불러오는 중…</p>}
+
+            {detail.card.kind === 'application' && detail.application && (
+              <>
+                <div className="detail-grid">
+                  <div>
+                    <span>촬영 가능</span>
+                    <strong>{CONDITION[detail.application.available] ?? '미응답'}</strong>
+                  </div>
+                  <div>
+                    <span>지역 이동</span>
+                    <strong>{CONDITION[detail.application.travel] ?? '미응답'}</strong>
+                  </div>
+                  <div>
+                    <span>출연료 수용</span>
+                    <strong>{CONDITION[detail.application.payAccepted] ?? '미응답'}</strong>
+                  </div>
+                </div>
+                <div className="detail-block">
+                  <h3>자료와 연락처</h3>
+                  <p>필수 역량: {detail.application.skill || '미입력'}</p>
+                  <p>
+                    연락처: {detail.application.phone} · {detail.application.email}
+                  </p>
+                  {detail.application.photoUrls.length > 0 && (
+                    <button className="text-button" onClick={() => setDetailPhotoAt(0)}>
+                      사진 크게 보기
+                      {detail.application.photoUrls.length > 1 &&
+                        ` (${detail.application.photoUrls.length}장)`}
+                    </button>
+                  )}
+                  {detail.application.videoUrl && (
+                    <a href={detail.application.videoUrl} target="_blank" rel="noreferrer">
+                      연기 영상 열기 ↗
+                    </a>
+                  )}
+                </div>
+              </>
+            )}
+
+            {detail.card.kind === 'candidate' && (
+              <div className="detail-block">
+                <h3>등록 후보</h3>
+                <p>
+                  {detail.card.addedBy.name
+                    ? `${detail.card.addedBy.name}님이 후보로 올렸어요.`
+                    : '팀에서 후보로 올린 배우예요.'}
+                </p>
+                <a href={`/actors/${detail.card.actorId}`}>프로필 전체 보기 ↗</a>
+              </div>
+            )}
+
+            <div className="detail-block">
+              <h3>팀 의견</h3>
+              <p>
+                {detail.card.votes.length > 0
+                  ? `♥ ${detail.card.votes.length} · ${detail.card.votes.map((vote) => vote.name).join(', ')}`
+                  : '아직 픽한 팀원이 없어요.'}
+              </p>
+              <p className={styles.moveLog}>
+                {detail.card.lastMove
+                  ? `${detail.card.lastMove.name}님이 ${moveAgo(detail.card.lastMove.at)} 옮김`
+                  : '아직 이동 기록이 없어요'}
+              </p>
+              {detail.card.notes.length > 0 && (
+                <div className={styles.noteThread}>
+                  {detail.card.notes.map((note) => (
+                    <p key={note.id}>
+                      <strong>{note.name}</strong> {note.body}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {detail && detailPhotoAt !== null && detailPhotos(detail).length > 0 && (
+        <PhotoLightbox
+          photos={detailPhotos(detail)}
+          startAt={detailPhotoAt}
+          name={detail.card.name}
+          onClose={() => setDetailPhotoAt(null)}
+        />
+      )}
+
       {toast && (
         <div className="toast" role="status" onClick={() => setToast('')}>
           <span>{toast}</span>

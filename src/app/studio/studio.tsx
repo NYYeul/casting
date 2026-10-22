@@ -1105,13 +1105,50 @@ export default function Studio({
                 </span>
               </div>
             </div>
+            {/*
+              추천·비교·보드·캘린더는 하단 탭에 자리가 없어 데스크톱 메뉴에만 있다.
+              링크 자체는 전부터 여기 있었지만 계정 항목과 한 줄로 섞여 있어서
+              '모바일에는 그런 기능이 없다'고 느껴졌다. 묶음과 한 줄 설명을 붙여 찾을 수 있게 한다.
+            */}
+            <div className="section-head">
+              <h2>제작 도구</h2>
+              <span className="muted" style={{ fontSize: 12 }}>
+                큰 화면에서 더 편해요
+              </span>
+            </div>
+            <div className="menu-list tool-list">
+              <a href="/studio/recommend">
+                {Icon.sparkle}
+                <span>
+                  배우 추천<small>배역 조건에 맞는 배우를 적합도 순으로</small>
+                </span>
+              </a>
+              <a href="/studio/compare">
+                {Icon.vs}
+                <span>
+                  후보 비교<small>두 명씩 골라 최종 1인 뽑기</small>
+                </span>
+              </a>
+              <a href="/studio/board">
+                {Icon.columns}
+                <span>
+                  팀 보드<small>팀원과 함께 단계별로 후보 정리</small>
+                </span>
+              </a>
+              <a href="/studio/calendar">
+                {Icon.calendar}
+                <span>
+                  오디션 캘린더<small>확정된 오디션 일정 한눈에</small>
+                </span>
+              </a>
+            </div>
+
+            <div className="section-head">
+              <h2>공고 관리</h2>
+            </div>
             <div className="menu-list">
               <a href="/studio/projects/new">{Icon.folder} 프로젝트 등록</a>
               <a href="/studio/actors">{Icon.search} 배우 찾기</a>
-              <a href="/studio/recommend">{Icon.sparkle} 배우 추천</a>
-              <a href="/studio/compare">{Icon.vs} 후보 비교</a>
-              <a href="/studio/board">{Icon.columns} 팀 보드</a>
-              <a href="/studio/calendar">{Icon.calendar} 오디션 캘린더</a>
               <button
                 onClick={() => {
                   setEditingRole(null);
