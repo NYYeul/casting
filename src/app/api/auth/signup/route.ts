@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createUser, getUserWithHash } from '@/lib/accounts';
 import { hasSetup, homeFor, startSession } from '@/lib/auth';
+import { claimApplications } from '@/lib/db';
 import { passwordProblem } from '@/lib/password';
 import { requiredText, validEmail } from '@/lib/validation';
 
@@ -34,6 +35,8 @@ export async function POST(request: NextRequest) {
     orgName: requiredText(body.orgName, 100),
   });
   await startSession({ userId: user.id, role: user.role });
+  // 가입 전에 같은 이메일로 낸 지원서가 있으면 새 계정에 붙인다
+  if (role === 'actor') claimApplications(user.id, email);
   return NextResponse.json(
     { ok: true, next: role === 'actor' ? '/me/profile' : homeFor(role) },
     { status: 201 },

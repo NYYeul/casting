@@ -402,6 +402,22 @@ export function listActorApplications(actorId: string) {
     .map((row) => appFromRow(row as Record<string, unknown>));
 }
 
+/**
+ * 로그인하지 않고 낸 지원서를 계정에 붙인다.
+ *
+ * 로그아웃 상태로 지원하면 actor_id 없이 이메일만 남아서, 나중에 같은 이메일로 로그인해도
+ * '내 지원 현황'에 나오지 않고 접수 링크도 이 브라우저에서만 찾을 수 있었다.
+ *
+ * 방금 이 이메일로 비밀번호 인증을 통과한 사람만 호출한다 (로그인·가입 직후).
+ * 이미 주인이 있는 지원서(actor_id가 찬 것)는 건드리지 않는다.
+ */
+export function claimApplications(actorId: string, email: string) {
+  const result = db()
+    .prepare('UPDATE applications SET actor_id=? WHERE actor_id IS NULL AND email=?')
+    .run(actorId, email.toLowerCase());
+  return Number(result.changes);
+}
+
 export function roleOwnedBy(roleId: string, ownerId: string) {
   return Boolean(
     db().prepare('SELECT 1 FROM roles WHERE id=? AND owner_id=?').get(roleId, ownerId),
