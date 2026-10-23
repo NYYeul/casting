@@ -3974,3 +3974,149 @@ img {
     grid-template-columns: 1fr;
   }
 }
+
+.demo-entry {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px dashed var(--lavender-strong);
+  border-radius: 16px;
+  background: var(--lavender);
+  display: grid;
+  gap: 10px;
+  text-align: center;
+}
+.demo-entry .demo-caption {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--primary-deep);
+}
+.demo-entry .demo-row {
+  display: flex;
+  gap: 10px;
+}
+.demo-entry .demo-row .button {
+  flex: 1;
+  justify-content: center;
+  background: #fff;
+}
+@media (max-width: 560px) {
+  .demo-entry .demo-row {
+    flex-direction: column;
+  }
+}
+
+/* 알림 벨 + 드롭다운 */
+.notif-wrap {
+  position: relative;
+}
+.bell-btn .dot.pulse {
+  top: 4px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  animation: notif-pulse 2s infinite;
+}
+@keyframes notif-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 60, 90, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(220, 60, 90, 0);
+  }
+}
+.notif-panel {
+  position: absolute;
+  top: 46px;
+  right: 0;
+  width: 330px;
+  max-width: calc(100vw - 32px);
+  max-height: 70vh;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 16px 40px rgba(23, 19, 33, 0.14);
+  padding: 8px;
+  z-index: 60;
+}
+.notif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 10px;
+}
+.notif-empty {
+  padding: 18px 10px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+.notif-item {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: 10px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.notif-item:hover {
+  background: var(--lavender);
+}
+.notif-icon {
+  font-size: 16px;
+}
+.notif-text {
+  font-size: 13px;
+  line-height: 1.4;
+}
+.notif-item small {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* 배우 홈 상단 + 맞춤 공고 */
+.me-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.match-card {
+  position: relative;
+}
+.match-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.match-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.match-reasons span {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary-deep);
+  background: var(--lavender);
+  padding: 3px 9px;
+  border-radius: 999px;
+}

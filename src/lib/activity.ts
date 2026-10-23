@@ -1,0 +1,212 @@
+// 알림 피드 — 실제 DB 이벤트(지원·메시지·제안 응답·공고)를 모아 최근순으로 반환.
+// 별도 notifications 테이블 없이 파생 데이터로 구성해 항상 실제 상태와 일치한다.
+import { db } from './db';
+import { matchRoleForActor, type MatchProfileInput } from './match';
+
+export type ActivityItem = {
+  id: string;
+  icon: string;
+  text: string;
+  href: string;
+  at: string;
+};
+
+export type ActivityFeed = {
+  items: ActivityItem[];
+  badge: number;
+};
+
+type Row = Record<string, unknown>;
+const str = (value: unknown) => String(value ?? '');
+
+function clip(text: string, length = 34) {
+  return text.length > length ? `${text.slice(0, length)}…` : text;
+}
+
+function sortCap(items: ActivityItem[], cap = 10) {
+  return items.sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, cap);
+}
+
+export function producerFeed(ownerId: string): ActivityFeed {
+  const items: ActivityItem[] = [];
+
+  const applications = db()
+    .prepare(
+      `SELECT a.id, a.name, a.created_at, r.title role_title
+       FROM applications a JOIN roles r ON r.id = a.role_id
+       WHERE r.owner_id = ? ORDER BY a.created_at DESC LIMIT 6`,
+    )
+    .all(ownerId) as Row[];
+  for (const row of applications) {
+    items.push({
+      id: `app-${str(row.id)}`,
+      icon: '📥',
+      text: `${str(row.name)}님이 ‘${str(row.role_title)}’에 지원했어요`,
+      href: '/studio',
+      at: str(row.created_at),
+    });
+  }
+
+  const unread = db()
+    .prepare(
+      `SELECT m.id, m.body, m.created_at, a.name actor_name
+       FROM chat_messages m
+       JOIN applications a ON a.id = m.application_id
+       JOIN roles r ON r.id = a.role_id
+       WHERE r.owner_id = ? AND m.sender = 'actor'
+         AND m.created_at > COALESCE(
+           (SELECT MAX(p.created_at) FROM chat_messages p
+            WHERE p.application_id = a.id AND p.sender = 'producer'), '')
+       ORDER BY m.created_at DESC LIMIT 6`,
+    )
+    .all(ownerId) as Row[];
+  for (const row of unread) {
+    items.push({
+      id: `msg-${str(row.id)}`,
+      icon: '💬',
+      text: `${str(row.actor_name)}님의 메시지 — “${clip(str(row.body))}”`,
+      href: '/studio',
+      at: str(row.created_at),
+    });
+  }
+
+  const proposals = db()
+    .prepare(
+      `SELECT pr.id, pr.status, pr.created_at, u.name actor_name, r.title role_title
+       FROM proposals pr
+       JOIN users u ON u.id = pr.actor_id
+       JOIN roles r ON r.id = pr.role_id
+       WHERE pr.producer_id = ? AND pr.status != 'sent'
+       ORDER BY pr.created_at DESC LIMIT 4`,
+    )
+    .all(ownerId) as Row[];
+  for (const row of proposals) {
+    const accepted = row.status === 'accepted';
+    items.push({
+      id: `prop-${str(row.id)}`,
+      icon: accepted ? '🤝' : '✉️',
+      text: `${str(row.actor_name)}님이 ‘${str(row.role_title)}’ 제안을 ${accepted ? '수락' : '거절'}했어요`,
+      href: '/studio',
+      at: str(row.created_at),
+    });
+  }
+
+  const auditions = db()
+    .prepare(
+      `SELECT id, actor_name, starts_at FROM audition_events
+       WHERE owner_id = ? AND status = 'confirmed' AND starts_at >= ?
+       ORDER BY starts_at ASC LIMIT 3`,
+    )
+    .all(ownerId, new Date().toISOString()) as Row[];
+  for (const row of auditions) {
+    const when = new Date(str(row.starts_at));
+    items.push({
+      id: `aud-${str(row.id)}`,
+      icon: '📅',
+      text: `${str(row.actor_name)}님 오디션 ${when.getMonth() + 1}/${when.getDate()} ${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')} 확정`,
+      href: '/studio/calendar',
+      at: str(row.starts_at),
+    });
+  }
+
+  return { items: sortCap(items), badge: unread.length };
+}
+
+export function actorFeed(actorId: string, profile: MatchProfileInput | null): ActivityFeed {
+  const items: ActivityItem[] = [];
+  let badge = 0;
+
+  const proposals = db()
+    .prepare(
+      `SELECT pr.id, pr.created_at, r.title role_title, r.project_title
+       FROM proposals pr JOIN roles r ON r.id = pr.role_id
+       WHERE pr.actor_id = ? AND pr.status = 'sent' ORDER BY pr.created_at DESC LIMIT 4`,
+    )
+    .all(actorId) as Row[];
+  badge += proposals.length;
+  for (const row of proposals) {
+    items.push({
+      id: `prop-${str(row.id)}`,
+      icon: '✨',
+      text: `새 캐스팅 제안 — ‘${str(row.project_title)} ${str(row.role_title)}’`,
+      href: '/me',
+      at: str(row.created_at),
+    });
+  }
+
+  const messages = db()
+    .prepare(
+      `SELECT m.id, m.body, m.created_at, a.receipt_token, r.title role_title
+       FROM chat_messages m
+       JOIN applications a ON a.id = m.application_id
+       JOIN roles r ON r.id = a.role_id
+       WHERE a.actor_id = ? AND m.sender = 'producer'
+       ORDER BY m.created_at DESC LIMIT 4`,
+    )
+    .all(actorId) as Row[];
+  const recentWindow = Date.now() - 72 * 3600 * 1000;
+  for (const row of messages) {
+    if (new Date(str(row.created_at)).getTime() > recentWindow) badge += 1;
+    items.push({
+      id: `msg-${str(row.id)}`,
+      icon: '💬',
+      text: `‘${str(row.role_title)}’ 제작팀 — “${clip(str(row.body))}”`,
+      href: `/status/${str(row.receipt_token)}`,
+      at: str(row.created_at),
+    });
+  }
+
+  const updates = db()
+    .prepare(
+      `SELECT a.id, a.receipt_token, a.updated_at, a.public_stage, r.title role_title
+       FROM applications a JOIN roles r ON r.id = a.role_id
+       WHERE a.actor_id = ? AND a.public_stage != 'received'
+       ORDER BY a.updated_at DESC LIMIT 3`,
+    )
+    .all(actorId) as Row[];
+  for (const row of updates) {
+    const passed = row.public_stage !== 'rejected';
+    items.push({
+      id: `upd-${str(row.id)}`,
+      icon: passed ? '🎉' : '📢',
+      text: `‘${str(row.role_title)}’ 지원 결과가 업데이트됐어요`,
+      href: `/status/${str(row.receipt_token)}`,
+      at: str(row.updated_at),
+    });
+  }
+
+  if (profile) {
+    const since = new Date(Date.now() - 7 * 86400 * 1000).toISOString();
+    const roles = db()
+      .prepare(
+        `SELECT slug, title, description, requirement, location, shoot_date, project_title, created_at
+         FROM roles WHERE is_closed = 0 AND created_at >= ? ORDER BY created_at DESC`,
+      )
+      .all(since) as Row[];
+    const matched = roles
+      .map((row) => ({
+        row,
+        fit: matchRoleForActor(profile, {
+          title: str(row.title),
+          description: str(row.description),
+          requirement: str(row.requirement),
+          location: str(row.location),
+          shootDate: str(row.shoot_date),
+        }),
+      }))
+      .filter((entry) => entry.fit.score >= 25)
+      .sort((a, b) => b.fit.score - a.fit.score)
+      .slice(0, 3);
+    for (const { row, fit } of matched) {
+      items.push({
+        id: `role-${str(row.slug)}`,
+        icon: '🎯',
+        text: `내 프로필과 ${fit.score}% 맞는 새 공고 ‘${str(row.title)}’`,
+        href: `/apply/${str(row.slug)}`,
+        at: str(row.created_at),
+      });
+    }
+  }
+
+  return { items: sortCap(items), badge };
+}

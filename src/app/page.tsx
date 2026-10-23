@@ -1,6 +1,6 @@
-import { DemoEntry } from '@/components/demo-entry';
 import Link from 'next/link';
 import { Brand } from '@/components/brand';
+import { DemoEntry } from '@/components/demo-entry';
 import { getSession, homeFor } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -84,6 +84,7 @@ export default async function Landing() {
               </Link>
             </div>
           )}
+          {!demo && !session && <DemoEntry />}
         </div>
         <div className="lp-collage" aria-hidden>
           {collage.map((id, index) => (

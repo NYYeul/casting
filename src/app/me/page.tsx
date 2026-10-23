@@ -1,11 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import ActorNav from '@/components/actor-nav';
+import { NotifBell } from '@/components/notif-bell';
 import RecentStrip from '@/components/recent-strip';
 import { RECENT_ROLES } from '@/lib/recent';
 import { getProfile, listActorProposals } from '@/lib/accounts';
 import { getCurrentUser } from '@/lib/auth';
 import { listActorApplications, listOpenRoles } from '@/lib/db';
+import { matchRoleForActor } from '@/lib/match';
 import { profileCompletion } from '@/lib/profile';
 import { publicLabels } from '@/lib/types';
 import ProposalActions from './proposal-actions';
@@ -29,12 +31,24 @@ export default async function ActorHome() {
   const applications = listActorApplications(user.id);
   const appliedRoleIds = new Set(applications.map((item) => item.roleId));
   const roles = listOpenRoles(new Date().toISOString().slice(0, 10));
+  const matched = profile
+    ? roles
+        .map((role) => ({ role, fit: matchRoleForActor(profile, role) }))
+        .filter((entry) => entry.fit.score >= 25 && !appliedRoleIds.has(entry.role.id))
+        .sort((a, b) => b.fit.score - a.fit.score)
+        .slice(0, 4)
+    : [];
   return (
     <main className="app-shell wide">
       <ActorNav active="home" actorId={user.id} />
       <div className="screen-pad page-top">
-        <p className="greet-sub">{user.name}님, 안녕하세요.</p>
-        <h1 className="page-title">오늘의 오디션</h1>
+        <div className="me-top">
+          <div>
+            <p className="greet-sub">{user.name}님, 안녕하세요.</p>
+            <h1 className="page-title">오늘의 오디션</h1>
+          </div>
+          <NotifBell />
+        </div>
 
         <Link href="/me/profile" className="completion-card">
           <div>
@@ -121,6 +135,40 @@ export default async function ActorHome() {
         )}
 
         <RecentStrip storageKey={RECENT_ROLES} title="최근 본 공고" unit="개" />
+
+        {matched.length > 0 && (
+          <>
+            <div className="section-head">
+              <h2>나와 잘 맞는 공고</h2>
+              <span className="muted" style={{ fontSize: 12 }}>
+                프로필 기반 추천
+              </span>
+            </div>
+            <div className="role-grid">
+              {matched.map(({ role, fit }) => (
+                <Link
+                  key={role.id}
+                  href={`/apply/${role.slug}`}
+                  className="pcard role-link match-card"
+                >
+                  <span className="match-badge">{fit.score}% 매치</span>
+                  <h3>{role.projectTitle}</h3>
+                  <p className="sub">{role.title}</p>
+                  <p className="meta">
+                    촬영 {shortDate(role.shootDate)} · {role.location}
+                    <br />
+                    {role.pay}
+                  </p>
+                  <div className="match-reasons">
+                    {fit.reasons.slice(0, 3).map((reason) => (
+                      <span key={reason}>{reason}</span>
+                    ))}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
 
         <div className="section-head">
           <h2>모집 중인 배역</h2>

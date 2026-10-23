@@ -157,8 +157,228 @@ function db() {
     seedDemo(database);
     seedAccounts(database);
     seedTeams(database);
+    seedDemoActivity(database);
   }
   return database;
+}
+
+// 데모가 "살아있는" 느낌이 들도록 최근 시각 기준의 활동 데이터를 보장한다.
+// 모든 항목은 고유 키/본문 존재 여부로 중복 삽입을 막아 재시작해도 한 번만 들어간다.
+function seedDemoActivity(connection: DatabaseSync) {
+  const producer = connection
+    .prepare("SELECT id FROM users WHERE email='producer@demo.casting'")
+    .get() as { id: string } | undefined;
+  if (!producer) return;
+  const ownedRoles = connection
+    .prepare('SELECT id, title FROM roles WHERE owner_id=? ORDER BY created_at DESC LIMIT 3')
+    .all(producer.id) as { id: string; title: string }[];
+  if (!ownedRoles.length) return;
+  const ago = (minutes: number) => new Date(Date.now() - minutes * 60000).toISOString();
+  const ahead = (days: number) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+
+  // 방금 도착한 지원서 (제작자 피드 + 지원자 수 증가)
+  const freshApps = [
+    {
+      roleId: ownedRoles[0].id,
+      name: '오세훈',
+      age: 26,
+      email: 'osh.demo@applicant.dev',
+      intro: '단편 영화제 수상작에 출연했습니다. 감정선이 섬세한 연기를 보여드릴게요.',
+      skill: '감정 연기, 영어',
+      minutes: 35,
+      avatar: 61,
+    },
+    {
+      roleId: ownedRoles[0].id,
+      name: '문가영',
+      age: 24,
+      email: 'mgy.demo@applicant.dev',
+      intro: '뮤지컬 전공이라 노래와 연기 모두 자신 있습니다. 오디션 일정은 언제든 가능해요.',
+      skill: '노래, 댄스',
+      minutes: 190,
+      avatar: 62,
+    },
+    {
+      roleId: (ownedRoles[1] ?? ownedRoles[0]).id,
+      name: '배주완',
+      age: 29,
+      email: 'bjw.demo@applicant.dev',
+      intro: '독립 장편 경험이 많고 촬영 일정은 전부 비어 있습니다.',
+      skill: '액션, 운전',
+      minutes: 1500,
+      avatar: 63,
+    },
+  ];
+  const insertApp = connection.prepare(
+    `INSERT OR IGNORE INTO applications
+    (id,role_id,actor_id,name,age,email,phone,introduction,photo_url,video_url,available,travel,pay_accepted,skill,receipt_token,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  );
+  for (const item of freshApps) {
+    const at = ago(item.minutes);
+    insertApp.run(
+      randomUUID(),
+      item.roleId,
+      null,
+      item.name,
+      item.age,
+      item.email,
+      '010-7777-8888',
+      item.intro,
+      `/avatars/p${String(((item.avatar - 1) % 20) + 1).padStart(2, '0')}.svg`,
+      '',
+      '전 일정 가능',
+      '서울 외 이동 가능',
+      'yes',
+      item.skill,
+      randomBytes(24).toString('hex'),
+      at,
+      at,
+    );
+  }
+
+  // 읽지 않은 배우 메시지 (제작자 벨 배지)
+  const thread = connection
+    .prepare(
+      `SELECT a.id FROM applications a JOIN roles r ON r.id = a.role_id
+       WHERE r.owner_id = ? ORDER BY a.created_at LIMIT 1`,
+    )
+    .get(producer.id) as { id: string } | undefined;
+  if (thread) {
+    const marker = '지원서를 검토해 주셔서 감사합니다';
+    const exists = connection
+      .prepare(
+        'SELECT 1 FROM chat_messages WHERE application_id=? AND body LIKE ?',
+      )
+      .get(thread.id, `%${marker}%`);
+    if (!exists) {
+      const insertMsg = connection.prepare(
+        `INSERT INTO chat_messages (id,application_id,sender,kind,body,slots,place,preparation,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?)`,
+      );
+      insertMsg.run(
+        randomUUID(),
+        thread.id,
+        'actor',
+        'text',
+        '안녕하세요! 지원서를 검토해 주셔서 감사합니다 😊',
+        '[]',
+        '',
+        '',
+        ago(40),
+      );
+      insertMsg.run(
+        randomUUID(),
+        thread.id,
+        'actor',
+        'text',
+        '필요하시면 추가 포트폴리오 영상도 바로 보내드릴게요!',
+        '[]',
+        '',
+        '',
+        ago(22),
+      );
+    }
+  }
+
+  // 배우에게 도착한 새 캐스팅 제안 + 제작자에게 도착한 수락 응답
+  const insertProposal = connection.prepare(
+    `INSERT OR IGNORE INTO proposals (id,producer_id,actor_id,role_id,message,status,created_at)
+    VALUES (?,?,?,?,?,?,?)`,
+  );
+  const actorByEmail = (email: string) =>
+    connection.prepare('SELECT id FROM users WHERE email=?').get(email) as
+      | { id: string }
+      | undefined;
+  const actor01 = actorByEmail('actor01@demo.casting');
+  if (actor01 && ownedRoles[0])
+    insertProposal.run(
+      randomUUID(),
+      producer.id,
+      actor01.id,
+      ownedRoles[0].id,
+      '프로필을 보고 배역과 잘 어울리실 것 같아 제안드립니다. 대본 일부를 보내드릴 테니 편하게 확인해 주세요.',
+      'sent',
+      ago(95),
+    );
+  const actor02 = actorByEmail('actor02@demo.casting');
+  if (actor02 && ownedRoles[1])
+    insertProposal.run(
+      randomUUID(),
+      producer.id,
+      actor02.id,
+      ownedRoles[1].id,
+      '오디션 없이 바로 캐스팅 제안드리고 싶습니다. 일정 확인 부탁드려요.',
+      'accepted',
+      ago(300),
+    );
+
+  // 방금 올라온 새 공고 (배우 맞춤 공고·피드)
+  const freshRoles = [
+    {
+      slug: 'demo-mv-heroine',
+      projectTitle: '뮤직비디오 〈여름 밤〉',
+      genre: '뮤직비디오',
+      title: '여주인공',
+      description: '청순한 이미지의 20대 여성 배우를 찾습니다. 노래 장면 위주의 감성 촬영입니다.',
+      requirement: '20대 여성, 청순한 이미지, 노래·댄스 가능자 우대',
+      location: '서울',
+      pay: '회당 30만원',
+      shootDate: ahead(14),
+      deadline: ahead(10),
+    },
+    {
+      slug: 'demo-indie-lead',
+      projectTitle: '독립영화 〈귀가〉',
+      genre: '독립영화',
+      title: '주연 재민 역',
+      description: '따뜻하고 담백한 톤의 생활 연기를 보여줄 20대 남성 주연을 구합니다.',
+      requirement: '20대 남성, 자연스러운 대화 연기, 지방 촬영 가능',
+      location: '서울',
+      pay: '총 250만원',
+      shootDate: ahead(20),
+      deadline: ahead(12),
+    },
+  ];
+  const insertProject = connection.prepare(
+    'INSERT INTO projects (id,owner_id,title,genre,shoot_start,shoot_end,location,created_at) VALUES (?,?,?,?,?,?,?,?)',
+  );
+  const insertRole = connection.prepare(
+    `INSERT INTO roles (id,slug,owner_id,project_id,project_title,title,description,shoot_date,location,pay,deadline,contact_name,announcement_date,requirement,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  );
+  for (const item of freshRoles) {
+    const existing = connection.prepare('SELECT 1 FROM roles WHERE slug=?').get(item.slug);
+    if (existing) continue;
+    const projectId = randomUUID();
+    insertProject.run(
+      projectId,
+      producer.id,
+      item.projectTitle,
+      item.genre,
+      item.shootDate,
+      item.shootDate,
+      item.location,
+      ago(60),
+    );
+    insertRole.run(
+      randomUUID(),
+      item.slug,
+      producer.id,
+      projectId,
+      item.projectTitle,
+      item.title,
+      item.description,
+      item.shootDate,
+      item.location,
+      item.pay,
+      item.deadline,
+      '이지현',
+      ahead(30),
+      item.requirement,
+      ago(60),
+    );
+  }
 }
 
 function addColumn(connection: DatabaseSync, table: string, column: string, definition: string) {
