@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Brand } from '@/components/brand';
+import { DemoEntry } from '@/components/demo-entry';
 import { getSession, homeFor } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -78,6 +79,7 @@ export default async function Landing() {
               모집 중인 배역 보기
             </Link>
           </div>
+          {!session && <DemoEntry />}
         </div>
         <div className="lp-collage" aria-hidden>
           {collage.map((id, index) => (

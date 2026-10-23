@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Brand } from '@/components/brand';
+import { DemoEntry } from '@/components/demo-entry';
 
 export default function LoginForm({ next }: { next: string }) {
   const [busy, setBusy] = useState(false);
@@ -62,6 +63,7 @@ export default function LoginForm({ next }: { next: string }) {
             {busy ? '로그인 중…' : '로그인'}
           </button>
         </form>
+        <DemoEntry caption="또는 데모로 바로 보기" />
         <p className="small-note center">
           아직 계정이 없나요? <Link href="/signup">회원가입</Link>
         </p>

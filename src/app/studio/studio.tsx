@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Application, Audition, PublicStage, ReviewStatus, Role } from '@/lib/types';
 import { publicLabels, reviewLabels } from '@/lib/types';
 import ChatThread from '@/components/chat-thread';
+import { NotifBell } from '@/components/notif-bell';
 import ProducerNav from '@/components/producer-nav';
 
 type Tab = 'home' | 'applicants' | 'messages' | 'profile';
@@ -639,20 +640,7 @@ export default function Studio({
           Casting Swipe
         </div>
         <span className="desk-only" />
-        <button
-          className="bell-btn"
-          aria-label="알림"
-          onClick={() =>
-            setMessage(
-              unreadTotal > 0
-                ? `읽지 않은 메시지 ${unreadTotal}건이 있습니다.`
-                : '새로운 알림이 없습니다.',
-            )
-          }
-        >
-          {Icon.bell}
-          {unreadTotal > 0 && <span className="dot" />}
-        </button>
+        <NotifBell />
       </header>
       <div className="screen-pad">
         {tab === 'home' && (
