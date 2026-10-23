@@ -7,3 +7,5 @@ data/
 
 .demo/
 .vercel/
+.vercel
+.env*
