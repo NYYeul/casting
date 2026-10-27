@@ -51,10 +51,12 @@ function db(): Conn {
 }
 
 async function initialize(database: Conn) {
+  // 마지막으로 추가한 칸이 있으면 구조 변경을 건너뛴다. 칸을 새로 추가할 때는 이 기준도 그 칸으로 바꾼다.
+  // (아래는 모두 '없을 때만 만들기/추가'라서 다시 실행돼도 안전하다)
   const migrated = await database
     .prepare(
       `SELECT 1 FROM information_schema.columns
-       WHERE table_schema = current_schema() AND table_name='password_resets' AND column_name='used_at'`,
+       WHERE table_schema = current_schema() AND table_name='roles' AND column_name='shoot_dates'`,
     )
     .get();
   if (!migrated) {
@@ -199,6 +201,36 @@ async function initialize(database: Conn) {
     await addColumn(database, 'actor_profiles', 'documents', "TEXT NOT NULL DEFAULT '[]'");
     await addColumn(database, 'audition_events', 'place', "TEXT NOT NULL DEFAULT ''");
     await addColumn(database, 'audition_events', 'meeting_type', "TEXT NOT NULL DEFAULT ''");
+    // 프로젝트 정보 세분화: 장르·제작 구분·분량·공개처·제작진·소개·지역·일정 단계·제공 항목.
+    // 기존 칸은 그대로 둔다. genre 칸은 예전부터 '단편영화' 같은 '형식' 값을 담고 있어 형식으로 계속 쓴다.
+    const text = "TEXT NOT NULL DEFAULT ''";
+    const list = "TEXT NOT NULL DEFAULT '[]'";
+    await addColumn(database, 'projects', 'genres', list);
+    await addColumn(database, 'projects', 'production_type', text);
+    await addColumn(database, 'projects', 'runtime', text);
+    await addColumn(database, 'projects', 'release_channels', list);
+    await addColumn(database, 'projects', 'release_period', text);
+    await addColumn(database, 'projects', 'company', text);
+    await addColumn(database, 'projects', 'director', text);
+    await addColumn(database, 'projects', 'producer_name', text);
+    await addColumn(database, 'projects', 'logline', text);
+    await addColumn(database, 'projects', 'region', text);
+    await addColumn(database, 'projects', 'audition_start', text);
+    await addColumn(database, 'projects', 'audition_end', text);
+    await addColumn(database, 'projects', 'prep_start', text);
+    await addColumn(database, 'projects', 'prep_end', text);
+    await addColumn(database, 'projects', 'shoot_sessions', 'INTEGER NOT NULL DEFAULT 0');
+    await addColumn(database, 'projects', 'perks', list);
+    // 배역 구조화: 비중·성별·연령대·모집 인원·배역별 촬영일.
+    // shoot_dates가 빈 예전 배역은 shoot_date 하루짜리 배역으로 읽는다(roleFromRow).
+    await addColumn(database, 'roles', 'role_type', text);
+    await addColumn(database, 'roles', 'gender', text);
+    await addColumn(database, 'roles', 'age_min', 'INTEGER NOT NULL DEFAULT 0');
+    await addColumn(database, 'roles', 'age_max', 'INTEGER NOT NULL DEFAULT 0');
+    await addColumn(database, 'roles', 'headcount', 'INTEGER NOT NULL DEFAULT 1');
+    await addColumn(database, 'roles', 'shoot_mode', "TEXT NOT NULL DEFAULT 'all'");
+    // 이 칸이 구조 변경 기준(맨 위 migrated)이라 반드시 마지막에 추가한다.
+    await addColumn(database, 'roles', 'shoot_dates', list);
   }
   if (
     (process.env.NODE_ENV !== 'production' || process.env.DEMO_BUILD === 'true') &&
@@ -433,7 +465,16 @@ async function addColumn(connection: Conn, table: string, column: string, defini
 
 export { db, ensureReady };
 
+const ROLE_TYPE_VALUES = ['lead', 'supporting', 'minor', 'extra'];
+const ROLE_GENDER_VALUES = ['male', 'female', 'any'];
+
 function roleFromRow(row: Record<string, unknown>): Role {
+  const dates = stringList(row.shoot_dates);
+  // 배역별 촬영일이 생기기 전의 배역은 날짜가 shoot_date 하나뿐이다.
+  // '일괄 적용'으로 읽으면 다음 저장 때 작품 기간으로 바뀌어 버리므로, 그 하루를 따로 지정한 것으로 본다.
+  const legacy = dates.length === 0;
+  const roleType = String(row.role_type ?? '');
+  const gender = String(row.gender ?? '');
   return {
     id: String(row.id),
     slug: String(row.slug),
@@ -441,6 +482,13 @@ function roleFromRow(row: Record<string, unknown>): Role {
     title: String(row.title),
     description: String(row.description),
     shootDate: String(row.shoot_date),
+    shootDates: legacy ? (row.shoot_date ? [String(row.shoot_date)] : []) : dates,
+    shootMode: legacy || row.shoot_mode === 'custom' ? 'custom' : 'all',
+    roleType: (ROLE_TYPE_VALUES.includes(roleType) ? roleType : '') as Role['roleType'],
+    gender: (ROLE_GENDER_VALUES.includes(gender) ? gender : '') as Role['gender'],
+    ageMin: Number(row.age_min || 0),
+    ageMax: Number(row.age_max || 0),
+    headcount: Math.max(1, Number(row.headcount || 1)),
     location: String(row.location),
     pay: String(row.pay),
     deadline: String(row.deadline),
@@ -541,6 +589,17 @@ export async function listRoles(ownerId: string) {
   ).map((row) => roleFromRow(row as Record<string, unknown>));
 }
 
+/** 한 작품의 배역들(만든 순서대로). 프로젝트 수정 화면에서 배역을 함께 고칠 때 쓴다. */
+export async function listProjectRoles(projectId: string) {
+  return (
+    await db()
+      .prepare(
+        `${ROLE_STATS} WHERE roles.project_id=? GROUP BY roles.id ORDER BY roles.created_at ASC`,
+      )
+      .all(projectId)
+  ).map((row) => roleFromRow(row as Record<string, unknown>));
+}
+
 export async function listOpenRoles(today: string) {
   return (
     await db()
@@ -569,6 +628,12 @@ export async function getRoleById(id: string) {
   return row ? roleFromRow(row as Record<string, unknown>) : null;
 }
 
+/** 배역을 구조화하는 칸. 넘기지 않으면 기본값이 들어간다(예전 '배역 빠르게 추가' API 등). */
+export type RoleDetails = Pick<
+  Role,
+  'shootDates' | 'shootMode' | 'roleType' | 'gender' | 'ageMin' | 'ageMax' | 'headcount'
+>;
+
 export type NewRole = Pick<
   Role,
   | 'projectTitle'
@@ -581,16 +646,24 @@ export type NewRole = Pick<
   | 'contactName'
   | 'announcementDate'
   | 'requirement'
->;
+> &
+  Partial<RoleDetails>;
 
 export async function createRole(input: NewRole, ownerId: string | null, projectId: string | null) {
   const id = randomUUID();
   const slug = randomBytes(8).toString('hex');
   const now = new Date().toISOString();
+  // 날짜 목록 없이 하루만 넘기면 그 하루를 따로 지정한 배역으로 저장한다.
+  const shootDates = input.shootDates?.length
+    ? input.shootDates
+    : input.shootDate
+      ? [input.shootDate]
+      : [];
   await db()
     .prepare(
-      `INSERT INTO roles (id,slug,owner_id,project_id,project_title,title,description,shoot_date,location,pay,deadline,contact_name,announcement_date,requirement,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO roles (id,slug,owner_id,project_id,project_title,title,description,shoot_date,location,pay,deadline,contact_name,announcement_date,requirement,created_at,
+        role_type,gender,age_min,age_max,headcount,shoot_mode,shoot_dates)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     )
     .run(
       id,
@@ -600,7 +673,7 @@ export async function createRole(input: NewRole, ownerId: string | null, project
       input.projectTitle,
       input.title,
       input.description,
-      input.shootDate,
+      shootDates[0] ?? input.shootDate,
       input.location,
       input.pay,
       input.deadline,
@@ -608,6 +681,13 @@ export async function createRole(input: NewRole, ownerId: string | null, project
       input.announcementDate,
       input.requirement,
       now,
+      input.roleType ?? '',
+      input.gender ?? '',
+      input.ageMin ?? 0,
+      input.ageMax ?? 0,
+      input.headcount ?? 1,
+      input.shootMode ?? 'custom',
+      JSON.stringify(shootDates),
     );
   await recordEvent(id, null, 'role_published');
   return (await getRole(slug))!;
@@ -616,15 +696,20 @@ export async function createRole(input: NewRole, ownerId: string | null, project
 export async function updateRole(id: string, input: Partial<Role>) {
   const current = await getRoleById(id);
   if (!current) return null;
+  // 예전 API처럼 shootDate 하루만 바꾸면 그 하루를 따로 지정한 것으로 본다.
+  const onlyOneDay = input.shootDate !== undefined && input.shootDates === undefined;
+  const shootDates = input.shootDates ?? (onlyOneDay ? [input.shootDate!] : current.shootDates);
+  const shootMode = input.shootMode ?? (onlyOneDay ? 'custom' : current.shootMode);
   await db()
     .prepare(
-      `UPDATE roles SET project_title=?,title=?,description=?,shoot_date=?,location=?,pay=?,deadline=?,contact_name=?,announcement_date=?,requirement=?,is_closed=? WHERE id=?`,
+      `UPDATE roles SET project_title=?,title=?,description=?,shoot_date=?,location=?,pay=?,deadline=?,contact_name=?,announcement_date=?,requirement=?,is_closed=?,
+        role_type=?,gender=?,age_min=?,age_max=?,headcount=?,shoot_mode=?,shoot_dates=? WHERE id=?`,
     )
     .run(
       input.projectTitle ?? current.projectTitle,
       input.title ?? current.title,
       input.description ?? current.description,
-      input.shootDate ?? current.shootDate,
+      shootDates[0] ?? current.shootDate,
       input.location ?? current.location,
       input.pay ?? current.pay,
       input.deadline ?? current.deadline,
@@ -632,6 +717,13 @@ export async function updateRole(id: string, input: Partial<Role>) {
       input.announcementDate ?? current.announcementDate,
       input.requirement ?? current.requirement,
       Number(input.isClosed ?? current.isClosed),
+      input.roleType ?? current.roleType,
+      input.gender ?? current.gender,
+      input.ageMin ?? current.ageMin,
+      input.ageMax ?? current.ageMax,
+      input.headcount ?? current.headcount,
+      shootMode,
+      JSON.stringify(shootDates),
       id,
     );
   return await getRole(current.slug);

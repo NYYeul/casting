@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { getProject } from '@/lib/accounts';
 import { getCurrentUser } from '@/lib/auth';
-import { db } from '@/lib/db';
-import ProjectWizard from '../../new/project-wizard';
+import { listProjectRoles } from '@/lib/db';
+import { splitLocation } from '@/lib/project-meta';
+import ProjectWizard, { type ProjectDraft } from '../../new/project-wizard';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,10 +15,9 @@ export default async function EditProjectPage({ params }: Context) {
   if (!user) redirect('/login?next=/studio');
   if (user.role !== 'producer') redirect('/me');
   const { id } = await params;
-  const row = (await db().prepare('SELECT * FROM projects WHERE id=?').get(id)) as
-    Record<string, unknown> | undefined;
-  if (!row) notFound();
-  if (String(row.owner_id) !== user.id) {
+  const project = await getProject(id);
+  if (!project) notFound();
+  if (project.ownerId !== user.id) {
     return (
       <main className="app-shell">
         <div className="screen-pad page-top">
@@ -32,18 +33,55 @@ export default async function EditProjectPage({ params }: Context) {
       </main>
     );
   }
-  return (
-    <ProjectWizard
-      contactName={user.orgName || user.name}
-      editId={id}
-      initial={{
-        title: String(row.title),
-        genre: String(row.genre),
-        shootStart: String(row.shoot_start),
-        shootEnd: String(row.shoot_end),
-        location: String(row.location),
-        description: String(row.description),
-      }}
-    />
-  );
+
+  const roles = await listProjectRoles(id);
+  // 지원 조건은 배역마다 저장돼 있지만 화면에서는 작품 하나의 값으로 다룬다(저장하면 모든 배역에 일괄 반영).
+  const first = roles[0];
+  const place = splitLocation(project.location, project.region);
+  const initial: ProjectDraft = {
+    title: project.title,
+    genre: project.genre,
+    genres: project.genres,
+    productionType: project.productionType,
+    runtime: project.runtime,
+    releaseChannels: project.releaseChannels,
+    releasePeriod: project.releasePeriod,
+    company: project.company,
+    director: project.director,
+    producerName: project.producerName,
+    logline: project.logline,
+    description: project.description,
+    region: place.region,
+    locationDetail: place.detail,
+    auditionStart: project.auditionStart,
+    auditionEnd: project.auditionEnd,
+    prepStart: project.prepStart,
+    prepEnd: project.prepEnd,
+    shootStart: project.shootStart,
+    shootEnd: project.shootEnd === project.shootStart ? '' : project.shootEnd,
+    shootSessions: project.shootSessions ? String(project.shootSessions) : '',
+    roles: roles.map((role) => ({
+      key: role.id,
+      id: role.id,
+      isClosed: role.isClosed,
+      applicationCount: role.applicationCount ?? 0,
+      title: role.title,
+      description: role.description,
+      requirement: role.requirement,
+      roleType: role.roleType,
+      gender: role.gender,
+      ageMin: role.ageMin ? String(role.ageMin) : '',
+      ageMax: role.ageMax ? String(role.ageMax) : '',
+      headcount: String(role.headcount),
+      shootMode: role.shootMode,
+      shootDates: role.shootMode === 'custom' ? role.shootDates : [],
+    })),
+    deadline: first?.deadline ?? '',
+    announcementDate: first?.announcementDate ?? '',
+    pay: first?.pay ?? '',
+    perks: project.perks,
+    contactName: first?.contactName || user.orgName || user.name,
+  };
+
+  return <ProjectWizard contactName={user.orgName || user.name} editId={id} initial={initial} />;
 }

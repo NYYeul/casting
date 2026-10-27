@@ -6,6 +6,7 @@ import FindSwitch from '@/components/find-switch';
 import ProducerNav from '@/components/producer-nav';
 import RecentStrip from '@/components/recent-strip';
 import { RECENT_ACTORS } from '@/lib/recent';
+import { useBackClose } from '@/lib/use-back-close';
 import type { ActorProfileFull } from '@/lib/accounts';
 import {
   ageOf,
@@ -87,6 +88,8 @@ export default function ActorSearch() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [sheet, setSheet] = useState(false);
+  // 모바일 필터 시트는 휴대폰 뒤로가기로 닫힌다.
+  useBackClose(sheet, () => setSheet(false));
   const loadSeq = useRef(0);
 
   const load = useCallback(async (current: typeof EMPTY, offset = 0, append = false) => {

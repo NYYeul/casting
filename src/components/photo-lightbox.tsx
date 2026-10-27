@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useBackClose } from '@/lib/use-back-close';
 
 /**
  * 사진을 화면에 꽉 차게 띄운다.
@@ -21,6 +22,8 @@ export default function PhotoLightbox({
   const [index, setIndex] = useState(startAt);
   const [failed, setFailed] = useState(false);
   const count = photos.length;
+  // 휴대폰 뒤로가기는 사진만 닫고, 뒤에 열린 지원자 상세는 그대로 둔다.
+  useBackClose(true, onClose);
 
   const move = useCallback(
     (step: number) => {

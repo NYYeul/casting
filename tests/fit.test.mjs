@@ -88,3 +88,11 @@ test('연령·키 범위를 벗어나면 해당 가점이 없다', () => {
   assert.ok(!result.reasons.includes('연령 조건 부합'));
   assert.ok(!result.reasons.includes('키 조건 부합'));
 });
+
+test('여러 촬영일 중 하루라도 불가일이면 감점하고 겹친 날 수를 알려 준다', () => {
+  const brief = { ...lightBrief, shootDates: ['2026-11-19', '2026-11-20', '2026-11-21'] };
+  const { reasons } = scoreActor(actor, brief, YEAR);
+  assert.ok(reasons.includes('출연 불가일과 촬영일 겹침 (1일)'));
+  const free = scoreActor(actor, { ...lightBrief, shootDates: ['2026-11-21'] }, YEAR);
+  assert.ok(free.reasons.includes('촬영 일정 문제없음'));
+});

@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import BackButton from '@/components/back-button';
 import PhotoLightbox from '@/components/photo-lightbox';
 import ProducerNav from '@/components/producer-nav';
 import { ageOf } from '@/lib/profile';
+import { useBackClose } from '@/lib/use-back-close';
 import styles from './board.module.css';
 
 type BoardRole = 'owner' | 'member';
@@ -193,6 +195,10 @@ export default function BoardClient({ meId }: { meId: string }) {
   const [detail, setDetail] = useState<{ card: Card; application: AppDetail | null } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailPhotoAt, setDetailPhotoAt] = useState<number | null>(null);
+  // 상세 패널·후보 추가 시트·카드 메뉴는 휴대폰 뒤로가기로 닫힌다.
+  useBackClose(Boolean(detail), () => setDetail(null));
+  useBackClose(pickerOpen, () => setPickerOpen(false));
+  useBackClose(Boolean(menuFor), () => setMenuFor(null));
 
   async function openDetail(card: Card) {
     setDetail({ card, application: null });
@@ -514,6 +520,7 @@ export default function BoardClient({ meId }: { meId: string }) {
     <main className="app-shell wide">
       <ProducerNav active="board" />
       <div className="screen-pad page-top">
+        <BackButton fallback="/studio?tab=profile" label="뒤로" />
         <div className="title-row">
           <div>
             <p className="greet-sub">팀원과 함께 지원자를 검토하세요</p>

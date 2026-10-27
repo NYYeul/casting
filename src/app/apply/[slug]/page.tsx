@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { getProducerIntro, getProfile, getUserById } from '@/lib/accounts';
+import { getProducerIntro, getProfile, getProject, getUserById } from '@/lib/accounts';
 import { getActorId } from '@/lib/auth';
 import { getRole } from '@/lib/db';
 import { ageOf } from '@/lib/profile';
@@ -40,12 +40,14 @@ export default async function ApplyPage({
         photos: profile.photos,
         videoUrl: profile.videoUrl,
         skill: profile.skills.join(', '),
-        unavailable: profile.unavailableDates.includes(role.shootDate),
+        // 배역 촬영일 중 하루라도 출연 불가일이면 미리 알려 준다.
+        unavailable: role.shootDates.some((day) => profile.unavailableDates.includes(day)),
       };
   }
   return (
     <ApplyForm
       role={role}
+      project={role.projectId ? await getProject(role.projectId) : null}
       prefill={prefill}
       producer={role.ownerId ? await getProducerIntro(role.ownerId) : null}
       proposalId={actorId && proposal && /^[\w-]{8,60}$/.test(proposal) ? proposal : ''}

@@ -17,7 +17,8 @@ export function safeUrl(value: unknown) {
 export const MAX_APPLICATION_PHOTOS = 8;
 
 export const UPLOAD_PATTERN = /^\/api\/uploads\/[a-f0-9-]{36}\.(jpg|png|webp|pdf)$/;
-const AVATAR_PATTERN = /^\/avatars\/p\d{2}\.svg$/;
+// 데모용 그림 아바타와 데모 배우 사진(public/actors). 앱 안에 있는 파일이라 그대로 허용한다.
+const AVATAR_PATTERN = /^\/(avatars\/p\d{2}\.svg|actors\/actor-\d{2}\.jpg)$/;
 
 export function safeImageRef(value: unknown) {
   const text = requiredText(value, 1000);

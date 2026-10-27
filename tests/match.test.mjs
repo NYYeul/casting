@@ -30,7 +30,14 @@ test('여러 조건이 맞으면 높은 점수와 이유를 돌려준다', () =>
 });
 
 test('조건이 하나도 안 맞으면 낮은 점수', () => {
-  const other = { ...profile, gender: 'male', birthYear: 1980, region: '부산', tags: [], skills: [] };
+  const other = {
+    ...profile,
+    gender: 'male',
+    birthYear: 1980,
+    region: '부산',
+    tags: [],
+    skills: [],
+  };
   const { score } = matchRoleForActor(other, role, 2026);
   assert.ok(score <= 10, `expected low score got ${score}`);
 });
@@ -41,4 +48,36 @@ test('촬영일이 출연 불가일과 겹치면 감점', () => {
   const taken = matchRoleForActor(busy, role, 2026);
   assert.ok(taken.score < free.score);
   assert.ok(taken.reasons.some((item) => item.includes('겹침')));
+});
+
+test('여러 날 촬영하는 배역은 하루라도 불가일이면 감점하고 겹친 날 수를 알려 준다', () => {
+  const busy = { ...profile, unavailableDates: ['2099-02-03'] };
+  const multi = { ...role, shootDates: ['2099-02-01', '2099-02-02', '2099-02-03'] };
+  const free = matchRoleForActor(profile, multi, 2026);
+  const taken = matchRoleForActor(busy, multi, 2026);
+  assert.ok(taken.score < free.score);
+  assert.ok(taken.reasons.includes('촬영일과 출연 불가일 겹침 (1일)'));
+});
+
+test('배역에 적은 성별 칸이 설명 글보다 우선한다', () => {
+  // 설명 글은 '여성'인데 성별 칸은 남성
+  const maleRole = { ...role, gender: 'male' };
+  const asWritten = matchRoleForActor(profile, role, 2026);
+  const structured = matchRoleForActor(profile, maleRole, 2026);
+  assert.ok(structured.score < asWritten.score);
+  assert.ok(!structured.reasons.includes('성별 조건 부합'));
+  // '성별 무관'이면 설명 글에서도 성별을 추측하지 않는다
+  const anyRole = { ...role, gender: 'any' };
+  const any = matchRoleForActor({ ...profile, gender: 'male' }, anyRole, 2026);
+  const guessed = matchRoleForActor({ ...profile, gender: 'male' }, role, 2026);
+  assert.ok(any.score > guessed.score);
+});
+
+test('배역에 적은 연령대가 설명 글의 "20대"보다 우선한다', () => {
+  // 2001년생은 2026년 기준 26세(한국 나이)
+  const fits = matchRoleForActor(profile, { ...role, ageMin: 25, ageMax: 30 }, 2026);
+  const misses = matchRoleForActor(profile, { ...role, ageMin: 35, ageMax: 45 }, 2026);
+  assert.ok(fits.reasons.includes('연령 조건 부합'));
+  assert.ok(misses.score < fits.score);
+  assert.ok(!misses.reasons.some((item) => item.includes('20대')));
 });

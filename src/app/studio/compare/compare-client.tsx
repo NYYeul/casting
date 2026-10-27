@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import BackButton from '@/components/back-button';
 import ProducerNav from '@/components/producer-nav';
 import {
   applyPick,
@@ -273,6 +274,7 @@ export default function CompareClient() {
     <main className="app-shell wide">
       <ProducerNav active="compare" />
       <div className="screen-pad page-top">
+        <BackButton fallback="/studio?tab=profile" label="뒤로" />
         <div className="title-row">
           <div>
             <p className="greet-sub">두 명씩 골라 최종 1인을 뽑습니다</p>

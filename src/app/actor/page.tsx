@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { formatDates } from '@/lib/schedule';
 import { getActorId } from '@/lib/auth';
 import { listOpenRoles } from '@/lib/db';
 import MyApplications from './my-applications';
@@ -54,7 +55,8 @@ export default async function ActorHome() {
                   <h3>{role.projectTitle}</h3>
                   <p className="sub">{role.title}</p>
                   <p className="meta">
-                    촬영 {shortDate(role.shootDate)} · {role.location}
+                    촬영 {formatDates(role.shootDates, 1) || shortDate(role.shootDate)} ·{' '}
+                    {role.location}
                     <br />
                     {role.pay}
                   </p>

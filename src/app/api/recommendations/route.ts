@@ -4,12 +4,14 @@ import { getProducerId } from '@/lib/auth';
 import { getRoleById, roleOwnedBy } from '@/lib/db';
 import { koreanAge, scoreActor, type Brief } from '@/lib/fit';
 import { IMAGE_TAGS, SKILLS, type ActorProfile } from '@/lib/profile';
+import { normalizeDates } from '@/lib/schedule';
 import type { Role } from '@/lib/types';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const NO_STORE = { 'Cache-Control': 'private, no-store' };
 
-// 배역 텍스트에서 추천용 brief를 자동 생성한다 (결정적 규칙, 외부 API 없음).
+// 배역에서 추천용 brief를 자동 생성한다 (결정적 규칙, 외부 API 없음).
+// 배역에 적은 성별·연령대 칸이 있으면 그것을 쓰고, 없을 때만 설명 글에서 추측한다.
 function briefFromRole(role: Role): Brief {
   const text = `${role.title} ${role.description} ${role.requirement}`;
   const tags = IMAGE_TAGS.filter((tag) => text.includes(tag));
@@ -17,20 +19,28 @@ function briefFromRole(role: Role): Brief {
   const female = text.search(/여성|여자/);
   const male = text.search(/남성|남자/);
   const decade = text.match(/(\d{2})대/);
+  const guessedGender =
+    female === -1 && male === -1
+      ? undefined
+      : male === -1 || (female !== -1 && female < male)
+        ? 'female'
+        : 'male';
+  const hasAge = role.ageMin > 0 || role.ageMax > 0;
   return {
     gender:
-      female === -1 && male === -1
-        ? undefined
-        : male === -1 || (female !== -1 && female < male)
-          ? 'female'
-          : 'male',
-    ageMin: decade ? Number(decade[1]) : undefined,
-    ageMax: decade ? Number(decade[1]) + 9 : undefined,
+      role.gender === 'male' || role.gender === 'female'
+        ? role.gender
+        : role.gender === 'any'
+          ? undefined
+          : guessedGender,
+    ageMin: hasAge ? role.ageMin || undefined : decade ? Number(decade[1]) : undefined,
+    ageMax: hasAge ? role.ageMax || undefined : decade ? Number(decade[1]) + 9 : undefined,
     region: role.location.split(/\s+/)[0] || undefined,
     tags,
     skills,
     keywords: [...new Set([...tags, ...skills])],
     shootDate: role.shootDate || undefined,
+    shootDates: role.shootDates.length ? role.shootDates : undefined,
   };
 }
 
@@ -71,6 +81,9 @@ function sanitizeBrief(value: unknown): Brief {
     skills: wordList(body.skills, SKILLS.length),
     keywords: wordList(body.keywords, 12),
     shootDate: shootDate && DATE_PATTERN.test(shootDate) ? shootDate : undefined,
+    shootDates: normalizeDates(body.shootDates).length
+      ? normalizeDates(body.shootDates)
+      : undefined,
   };
 }
 

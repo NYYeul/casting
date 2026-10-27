@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { BrandMark } from './brand';
 
+// 지원자 화면은 프로젝트 아래 화면이라 메뉴에 따로 두지 않는다(프로젝트 카드의 [지원자 검토하기]로 들어간다).
 export type ProducerSection =
   | 'home'
-  | 'applicants'
   | 'messages'
   | 'profile'
   | 'actors'
@@ -38,13 +38,6 @@ const icons: Record<ProducerSection, React.ReactNode> = {
     <svg {...stroke}>
       <circle cx="11" cy="11" r="6.5" />
       <path d="m20 20-3.8-3.8" strokeLinecap="round" />
-    </svg>
-  ),
-  applicants: (
-    <svg {...stroke}>
-      <circle cx="9" cy="8" r="3.2" />
-      <path d="M3.5 19.5c.6-3.2 2.9-5 5.5-5s4.9 1.8 5.5 5" strokeLinecap="round" />
-      <path d="M15.5 5.5a3.2 3.2 0 0 1 0 5.6M17.8 14.9c1.6.6 2.6 2 3 4" strokeLinecap="round" />
     </svg>
   ),
   messages: (
@@ -100,7 +93,6 @@ const icons: Record<ProducerSection, React.ReactNode> = {
 const items: { key: ProducerSection; label: string; href: string; mobile: boolean }[] = [
   { key: 'home', label: '프로젝트', href: '/studio', mobile: true },
   { key: 'actors', label: '배우 찾기', href: '/studio/actors', mobile: true },
-  { key: 'applicants', label: '지원자', href: '/studio?tab=applicants', mobile: true },
   { key: 'messages', label: '메시지', href: '/studio?tab=messages', mobile: true },
   { key: 'recommend', label: '배우 추천', href: '/studio/recommend', mobile: false },
   { key: 'compare', label: '후보 비교', href: '/studio/compare', mobile: false },
@@ -110,7 +102,7 @@ const items: { key: ProducerSection; label: string; href: string; mobile: boolea
   { key: 'profile', label: '내 정보', href: '/studio?tab=profile', mobile: true },
 ];
 
-type StudioTab = 'home' | 'applicants' | 'messages' | 'profile';
+type StudioTab = 'home' | 'messages' | 'profile';
 
 export default function ProducerNav({
   active,
@@ -124,8 +116,10 @@ export default function ProducerNav({
   return (
     <nav className="pnav" aria-label="제작자 메뉴">
       <div className="pnav-brand">
-        <BrandMark />
-        Casting Swipe
+        <Link href="/" className="pnav-brand-link" aria-label="Casting Swipe 첫 화면으로">
+          <BrandMark />
+          Casting Swipe
+        </Link>
       </div>
       {items.map((item) => {
         const content = (
@@ -138,7 +132,7 @@ export default function ProducerNav({
           </>
         );
         const className = `${active === item.key ? 'active' : ''}${item.mobile ? '' : ' desk-only'}`;
-        const isTab = ['home', 'applicants', 'messages', 'profile'].includes(item.key);
+        const isTab = ['home', 'messages', 'profile'].includes(item.key);
         return onTab && isTab ? (
           <button key={item.key} className={className} onClick={() => onTab(item.key as StudioTab)}>
             {content}

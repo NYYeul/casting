@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { db, createRole, getRoleById, type NewRole } from './db';
+import { db, createRole, getRoleById, listProjectRoles, updateRole, type NewRole } from './db';
 import { hashPassword } from './password';
+import { daysBetween } from './schedule';
 import { transaction } from './sql';
 import { deleteUploads } from './storage';
 import type { ActorProfile, Filmography, Gender } from './profile';
@@ -44,13 +45,82 @@ export type Project = {
   id: string;
   ownerId: string;
   title: string;
+  /** 형식(단편영화·웹드라마 등). DB 칸 이름은 예전부터 genre다. */
   genre: string;
+  /** 장르(여러 개) */
+  genres: string[];
+  productionType: string;
+  /** 분량: "20분", "8부작" 등 자유 입력 */
+  runtime: string;
+  releaseChannels: string[];
+  /** 공개 예정 시기: "2027년 상반기" 등 자유 입력 */
+  releasePeriod: string;
+  company: string;
+  director: string;
+  producerName: string;
+  /** 한 줄 소개 */
+  logline: string;
+  /** 촬영 지역 시·도. 상세 지역까지 합친 문자열은 location */
+  region: string;
+  auditionStart: string;
+  auditionEnd: string;
+  /** 리딩·리허설 기간 */
+  prepStart: string;
+  prepEnd: string;
   shootStart: string;
   shootEnd: string;
+  /** 총 촬영 회차. 0이면 미정 */
+  shootSessions: number;
   location: string;
+  /** 시놉시스 */
   description: string;
+  /** 제공 항목(교통비·식사·숙박) */
+  perks: string[];
   createdAt: string;
 };
+
+export type ProjectInput = Omit<Project, 'id' | 'ownerId' | 'createdAt'>;
+
+/** 프로젝트 칸 기본값. 예전 경로(배역 빠르게 추가)로 만들 때 비어 있는 칸을 채운다. */
+export const EMPTY_PROJECT: ProjectInput = {
+  title: '',
+  genre: '',
+  genres: [],
+  productionType: '',
+  runtime: '',
+  releaseChannels: [],
+  releasePeriod: '',
+  company: '',
+  director: '',
+  producerName: '',
+  logline: '',
+  region: '',
+  auditionStart: '',
+  auditionEnd: '',
+  prepStart: '',
+  prepEnd: '',
+  shootStart: '',
+  shootEnd: '',
+  shootSessions: 0,
+  location: '',
+  description: '',
+  perks: [],
+};
+
+/** 모든 배역에 똑같이 들어가는 지원 조건. 프로젝트 등록·수정의 '조건·담당' 단계 값이다. */
+export type ProjectConditions = Pick<
+  NewRole,
+  'pay' | 'deadline' | 'announcementDate' | 'contactName'
+>;
+
+/** 프로젝트 등록·수정 화면에서 넘어오는 배역 한 개. id가 있으면 기존 배역 수정, 없으면 새 배역. */
+export type RoleEdit = Pick<NewRole, 'title' | 'description' | 'requirement'> &
+  Required<
+    Pick<
+      NewRole,
+      'roleType' | 'gender' | 'ageMin' | 'ageMax' | 'headcount' | 'shootMode' | 'shootDates'
+    >
+  > & { id?: string; isClosed?: boolean };
 
 export type Proposal = {
   id: string;
@@ -275,16 +345,49 @@ export async function setFavorite(producerId: string, actorId: string, on: boole
       .run(producerId, actorId);
 }
 
+/** JSON 문자열로 저장된 문자열 목록. 예전 행이나 깨진 값은 빈 목록으로 본다. */
+function listOf(value: unknown): string[] {
+  if (typeof value !== 'string' || !value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function textOf(value: unknown) {
+  return value === null || value === undefined ? '' : String(value);
+}
+
 function projectFromRow(row: Row): Project {
   return {
     id: String(row.id),
     ownerId: String(row.owner_id),
     title: String(row.title),
-    genre: String(row.genre),
-    shootStart: String(row.shoot_start),
-    shootEnd: String(row.shoot_end),
-    location: String(row.location),
-    description: String(row.description),
+    genre: textOf(row.genre),
+    genres: listOf(row.genres),
+    productionType: textOf(row.production_type),
+    runtime: textOf(row.runtime),
+    releaseChannels: listOf(row.release_channels),
+    releasePeriod: textOf(row.release_period),
+    company: textOf(row.company),
+    director: textOf(row.director),
+    producerName: textOf(row.producer_name),
+    logline: textOf(row.logline),
+    region: textOf(row.region),
+    auditionStart: textOf(row.audition_start),
+    auditionEnd: textOf(row.audition_end),
+    prepStart: textOf(row.prep_start),
+    prepEnd: textOf(row.prep_end),
+    shootStart: textOf(row.shoot_start),
+    shootEnd: textOf(row.shoot_end),
+    shootSessions: Number(row.shoot_sessions || 0),
+    location: textOf(row.location),
+    description: textOf(row.description),
+    perks: listOf(row.perks),
     createdAt: String(row.created_at),
   };
 }
@@ -297,28 +400,74 @@ export async function listProjects(ownerId: string) {
   ).map((row) => projectFromRow(row as Row));
 }
 
-async function insertProject(
-  ownerId: string,
-  input: Omit<Project, 'id' | 'ownerId' | 'createdAt'>,
-): Promise<Project> {
+export async function getProject(id: string) {
+  const row = await db().prepare('SELECT * FROM projects WHERE id=?').get(id);
+  return row ? projectFromRow(row as Row) : null;
+}
+
+// projects 칸 순서. INSERT와 UPDATE가 같은 순서를 쓴다.
+const PROJECT_COLUMNS = [
+  'title',
+  'genre',
+  'genres',
+  'production_type',
+  'runtime',
+  'release_channels',
+  'release_period',
+  'company',
+  'director',
+  'producer_name',
+  'logline',
+  'region',
+  'audition_start',
+  'audition_end',
+  'prep_start',
+  'prep_end',
+  'shoot_start',
+  'shoot_end',
+  'shoot_sessions',
+  'location',
+  'description',
+  'perks',
+];
+
+function projectValues(input: ProjectInput) {
+  return [
+    input.title,
+    input.genre,
+    JSON.stringify(input.genres),
+    input.productionType,
+    input.runtime,
+    JSON.stringify(input.releaseChannels),
+    input.releasePeriod,
+    input.company,
+    input.director,
+    input.producerName,
+    input.logline,
+    input.region,
+    input.auditionStart,
+    input.auditionEnd,
+    input.prepStart,
+    input.prepEnd,
+    input.shootStart,
+    input.shootEnd,
+    input.shootSessions,
+    input.location,
+    input.description,
+    JSON.stringify(input.perks),
+  ];
+}
+
+async function insertProject(ownerId: string, input: ProjectInput): Promise<Project> {
   const id = randomUUID();
+  const values = projectValues(input);
   await db()
     .prepare(
-      `INSERT INTO projects (id,owner_id,title,genre,shoot_start,shoot_end,location,description,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO projects (id,owner_id,${PROJECT_COLUMNS.join(',')},created_at)
+      VALUES (?,?,${values.map(() => '?').join(',')},?)`,
     )
-    .run(
-      id,
-      ownerId,
-      input.title,
-      input.genre,
-      input.shootStart,
-      input.shootEnd,
-      input.location,
-      input.description,
-      new Date().toISOString(),
-    );
-  return projectFromRow((await db().prepare('SELECT * FROM projects WHERE id=?').get(id)) as Row);
+    .run(id, ownerId, ...values, new Date().toISOString());
+  return (await getProject(id))!;
 }
 
 export async function findOrCreateProject(ownerId: string, role: NewRole) {
@@ -328,28 +477,109 @@ export async function findOrCreateProject(ownerId: string, role: NewRole) {
   return row
     ? projectFromRow(row as Row)
     : await insertProject(ownerId, {
+        ...EMPTY_PROJECT,
         title: role.projectTitle,
-        genre: '',
         shootStart: role.shootDate,
         shootEnd: role.shootDate,
         location: role.location,
-        description: '',
       });
+}
+
+/** 배역 한 개를 저장할 값으로. 작품명·지역·지원 조건은 모든 배역에 똑같이 들어간다(일괄 적용). */
+function roleInput(project: ProjectInput, conditions: ProjectConditions, role: RoleEdit): NewRole {
+  return {
+    projectTitle: project.title,
+    title: role.title,
+    description: role.description,
+    requirement: role.requirement,
+    shootDate: role.shootDates[0] ?? project.shootStart,
+    shootDates: role.shootDates,
+    shootMode: role.shootMode,
+    roleType: role.roleType,
+    gender: role.gender,
+    ageMin: role.ageMin,
+    ageMax: role.ageMax,
+    headcount: role.headcount,
+    location: project.location,
+    ...conditions,
+  };
 }
 
 export async function createProjectWithRoles(
   ownerId: string,
-  project: Omit<Project, 'id' | 'ownerId' | 'createdAt'>,
-  roles: Omit<NewRole, 'projectTitle'>[],
+  project: ProjectInput,
+  conditions: ProjectConditions,
+  roles: RoleEdit[],
 ) {
   return transaction(async () => {
     const created = await insertProject(ownerId, project);
     const createdRoles = [];
     for (const role of roles)
       createdRoles.push(
-        await createRole({ ...role, projectTitle: project.title }, ownerId, created.id),
+        await createRole(roleInput(project, conditions, role), ownerId, created.id),
       );
     return { project: created, roles: createdRoles };
+  });
+}
+
+/**
+ * 프로젝트 수정 저장. 작품 정보·지원 조건·배역을 한 번에(트랜잭션) 바꾼다.
+ * - 작품명·지역·지원 조건은 이 작품의 모든 배역에 일괄 반영한다.
+ *   (예전에는 작품명을 바꿔도 배역에 복사된 작품명이 그대로여서 홈 카드가 어긋났다)
+ * - id가 있는 배역은 수정, 없는 배역은 새로 만든다.
+ *   저장된 배역은 지우지 않는다. 지원서·대화가 연결돼 있어서 접수 마감(isClosed)으로 대신한다.
+ */
+export async function updateProjectWithRoles(
+  ownerId: string,
+  projectId: string,
+  project: ProjectInput,
+  conditions: ProjectConditions,
+  roles: RoleEdit[],
+) {
+  return transaction(async () => {
+    await db()
+      .prepare(
+        `UPDATE projects SET ${PROJECT_COLUMNS.map((column) => `${column}=?`).join(',')}
+        WHERE id=? AND owner_id=?`,
+      )
+      .run(...projectValues(project), projectId, ownerId);
+    await db()
+      .prepare(
+        `UPDATE roles SET project_title=?,location=?,pay=?,deadline=?,contact_name=?,announcement_date=?
+        WHERE project_id=?`,
+      )
+      .run(
+        project.title,
+        project.location,
+        conditions.pay,
+        conditions.deadline,
+        conditions.contactName,
+        conditions.announcementDate,
+        projectId,
+      );
+    // 작품 촬영 일정을 따르는 배역은 기간이 바뀌면 날짜도 따라간다. (예전 하루짜리 배역은 제외)
+    const projectDays = daysBetween(project.shootStart, project.shootEnd);
+    await db()
+      .prepare(
+        `UPDATE roles SET shoot_dates=?, shoot_date=?
+        WHERE project_id=? AND shoot_mode='all' AND shoot_dates <> '[]'`,
+      )
+      .run(JSON.stringify(projectDays), projectDays[0] ?? project.shootStart, projectId);
+
+    const own = new Set((await listProjectRoles(projectId)).map((role) => role.id));
+    for (const role of roles) {
+      if (role.id) {
+        // 다른 작품의 배역 id가 섞여 와도 건드리지 않는다.
+        if (!own.has(role.id)) continue;
+        await updateRole(role.id, {
+          ...roleInput(project, conditions, role),
+          ...(role.isClosed !== undefined ? { isClosed: role.isClosed } : {}),
+        });
+      } else {
+        await createRole(roleInput(project, conditions, role), ownerId, projectId);
+      }
+    }
+    return { project: (await getProject(projectId))!, roles: await listProjectRoles(projectId) };
   });
 }
 

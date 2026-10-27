@@ -1,13 +1,31 @@
 export type ReviewStatus = 'new' | 'reviewing' | 'hold' | 'interested' | 'excluded';
 export type PublicStage = 'received' | 'audition' | 'not_selected' | 'cast';
 
+/** 배역 비중. 빈 값은 미지정. */
+export type RoleType = 'lead' | 'supporting' | 'minor' | 'extra' | '';
+/** 배역 성별 조건. any는 무관, 빈 값은 미지정. */
+export type RoleGender = 'male' | 'female' | 'any' | '';
+/** 배역 촬영일 정하는 방식. all = 작품 촬영 일정 일괄 적용(기본), custom = 이 배역만 따로 지정. */
+export type ShootMode = 'all' | 'custom';
+
 export type Role = {
   id: string;
   slug: string;
   projectTitle: string;
   title: string;
   description: string;
+  /** 첫 촬영일. 예전 화면·추천과의 호환을 위해 shootDates의 첫날로 계속 채운다. */
   shootDate: string;
+  /** 이 배역의 실제 촬영일 목록(YYYY-MM-DD). all이면 저장할 때 작품 촬영 기간을 날짜로 펼쳐 둔다. */
+  shootDates: string[];
+  shootMode: ShootMode;
+  roleType: RoleType;
+  gender: RoleGender;
+  /** 연령대. 0이면 제한 없음. */
+  ageMin: number;
+  ageMax: number;
+  /** 모집 인원 */
+  headcount: number;
   location: string;
   pay: string;
   deadline: string;

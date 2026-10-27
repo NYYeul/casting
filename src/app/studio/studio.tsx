@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Application, Audition, PublicStage, ReviewStatus, Role } from '@/lib/types';
 import { publicLabels, reviewLabels } from '@/lib/types';
@@ -7,8 +8,11 @@ import ChatThread from '@/components/chat-thread';
 import { NotifBell } from '@/components/notif-bell';
 import PhotoLightbox from '@/components/photo-lightbox';
 import ProducerNav from '@/components/producer-nav';
+import { formatDates } from '@/lib/schedule';
+import { useBackClose } from '@/lib/use-back-close';
 
 type Tab = 'home' | 'applicants' | 'messages' | 'profile';
+const TABS: Tab[] = ['home', 'applicants', 'messages', 'profile'];
 type Filter = 'all' | 'new' | 'unknown' | 'interested' | 'hold' | 'shortlist';
 type Sort = 'newest' | 'oldest' | 'name';
 
@@ -258,6 +262,18 @@ const Icon = {
 function initials(name: string) {
   return name.slice(-2);
 }
+/** 같은 작품의 배역을 묶는 기준. 예전 배역은 project_id가 없을 수 있어 작품명으로 대신한다. */
+function projectKeyOf(role: Role) {
+  return role.projectId || role.projectTitle;
+}
+/** 탭과 고른 배역을 주소에 담는다. 뒤로가기·새로 고침에도 같은 화면이 열린다. */
+function studioUrl(tab: Tab, roleId: string) {
+  const params = new URLSearchParams();
+  if (tab !== 'home') params.set('tab', tab);
+  if (tab === 'applicants' && roleId) params.set('role', roleId);
+  const query = params.toString();
+  return query ? `/studio?${query}` : '/studio';
+}
 function conditionLabel(value: string) {
   return value === 'yes' ? '가능' : value === 'no' ? '불가' : '미확인';
 }
@@ -362,8 +378,6 @@ export default function Studio({
   const [search, setSearch] = useState('');
   const [msgSearch, setMsgSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [chatId, setChatId] = useState<string | null>(null);
   const [auth, setAuth] = useState<'loading' | 'error' | 'ready'>('loading');
   const [busy, setBusy] = useState(false);
@@ -382,7 +396,10 @@ export default function Studio({
     try {
       const result = await api<{ roles: Role[] }>('/api/roles');
       setRoles(result.roles);
-      setRoleId((current) => current || result.roles[0]?.id || '');
+      // 주소에 배역이 있으면(뒤로가기·새로 고침·알림 링크) 그 배역을 먼저 연다.
+      const fromUrl = new URLSearchParams(location.search).get('role');
+      const known = result.roles.some((item) => item.id === fromUrl) ? fromUrl : null;
+      setRoleId((current) => current || known || result.roles[0]?.id || '');
       setAuth('ready');
     } catch (error) {
       if (String(error).includes('인증')) {
@@ -446,6 +463,20 @@ export default function Studio({
     setPendingPublicStage(null);
     setPhotoAt(null);
   }, [selectedId, selected?.note]);
+  // 뒤로가기·앞으로가기로 주소가 바뀌면 그 주소의 탭과 배역으로 화면을 맞춘다.
+  useEffect(() => {
+    const sync = () => {
+      const params = new URLSearchParams(location.search);
+      setTab(TABS.find((item) => item === params.get('tab')) ?? 'home');
+      const fromUrl = params.get('role');
+      if (fromUrl) setRoleId(fromUrl);
+    };
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, []);
+  // 지원자 상세·대화 시트는 뒤로가기로 닫힌다. (사진 크게 보기는 PhotoLightbox 안에서 처리)
+  useBackClose(Boolean(selected), () => setSelectedId(null));
+  useBackClose(Boolean(chatId), closeChat);
 
   async function updateApplication(id: string, patch: Partial<Application>) {
     setBusy(true);
@@ -466,40 +497,27 @@ export default function Studio({
     }
   }
 
-  async function saveRole(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage('');
-    const form = new FormData(event.currentTarget);
-    const body = Object.fromEntries(form.entries());
-    try {
-      const result = await api<{ role: Role }>(
-        editingRole ? `/api/roles/${editingRole.id}` : '/api/roles',
-        {
-          method: editingRole ? 'PATCH' : 'POST',
-          body: JSON.stringify(body),
-        },
-      );
-      setRoles((current) =>
-        editingRole
-          ? current.map((item) => (item.id === editingRole.id ? result.role : item))
-          : [result.role, ...current],
-      );
-      setRoleId(result.role.id);
-      if (!editingRole) setApplications([]);
-      setCreateOpen(false);
-      setEditingRole(null);
-      setTab('applicants');
-      setMessage(
-        editingRole
-          ? '배역 정보를 수정했습니다.'
-          : '배역이 게시되었습니다. 지원 링크를 공유해 보세요.',
-      );
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '배역을 저장하지 못했습니다.');
-    } finally {
-      setBusy(false);
-    }
+  // 탭 이동을 브라우저 기록에 남겨 휴대폰·브라우저 뒤로가기로 이전 화면에 돌아갈 수 있게 한다.
+  function goTab(next: Tab, nextRoleId?: string) {
+    const target = nextRoleId ?? roleId;
+    if (nextRoleId) setRoleId(nextRoleId);
+    setTab(next);
+    const url = studioUrl(next, target);
+    if (url !== `${location.pathname}${location.search}`)
+      history.pushState({ __csTab: true }, '', url);
+    window.scrollTo({ top: 0 });
+  }
+
+  // 지원자 화면의 '‹ 프로젝트'. 프로젝트 목록에서 들어왔으면 뒤로, 알림 링크 등으로 바로 왔으면 목록으로.
+  function backToProjects() {
+    if ((history.state as { __csTab?: boolean } | null)?.__csTab) history.back();
+    else goTab('home');
+  }
+
+  function closeChat() {
+    setChatId(null);
+    void loadApplications(roleId);
+    void loadExtras();
   }
 
   async function toggleClosed(target: Role) {
@@ -603,6 +621,10 @@ export default function Studio({
   );
 
   const unreadTotal = applications.reduce((sum, item) => sum + (item.unreadCount || 0), 0);
+  // 지원자 화면은 '그 작품의 지원자'만 다룬다. 배역 선택도 같은 작품 안에서만.
+  const projectRoles = role
+    ? roles.filter((item) => projectKeyOf(item) === projectKeyOf(role))
+    : [];
 
   if (auth === 'loading')
     return (
@@ -638,10 +660,10 @@ export default function Studio({
         </div>
       )}
       <header className="home-header">
-        <div className="brand-word mobile-only">
+        <Link href="/" className="brand-word mobile-only" aria-label="Casting Swipe 첫 화면으로">
           {Icon.clapper}
           Casting Swipe
-        </div>
+        </Link>
         <span className="desk-only" />
         <NotifBell />
       </header>
@@ -659,14 +681,17 @@ export default function Studio({
             </div>
             {projects.length === 0 ? (
               <div className="empty-card">
-                첫 배역을 만들고
+                프로젝트를 등록하고
                 <br />
                 지원 링크를 공고에 붙여 보세요.
               </div>
             ) : (
               projects.map((project) => {
                 const first = project.roles[0];
-                const dates = project.roles.map((item) => item.shootDate).sort();
+                // 여러 날 촬영하는 배역도 있어서 첫날만이 아니라 모든 촬영일로 기간을 잡는다.
+                const dates = project.roles
+                  .flatMap((item) => (item.shootDates.length ? item.shootDates : [item.shootDate]))
+                  .sort();
                 const range =
                   dates[0] === dates[dates.length - 1]
                     ? formattedDate(dates[0])
@@ -710,9 +735,9 @@ export default function Studio({
                     <button
                       className="button button-primary full"
                       onClick={() => {
-                        setRoleId(first.id);
-                        setTab('applicants');
                         setFilter('all');
+                        setSelectedId(null);
+                        goTab('applicants', first.id);
                       }}
                     >
                       지원자 검토하기 ›
@@ -729,23 +754,14 @@ export default function Studio({
                 );
               })
             )}
+            {/* 배역 추가·수정은 각 프로젝트의 '프로젝트 수정'에서 한다. */}
             <div className="split-actions">
               <a className="button button-primary" href="/studio/projects/new">
                 {Icon.plus} 프로젝트 등록
               </a>
-              <button
-                className="button button-soft"
-                onClick={() => {
-                  setEditingRole(null);
-                  setCreateOpen(true);
-                }}
-              >
-                {Icon.plus} 배역만 빠르게 추가
-              </button>
             </div>
             <div className="section-head">
               <h2>새로 지원한 배우</h2>
-              <button onClick={() => setTab('applicants')}>전체 보기 ›</button>
             </div>
             {recent.length === 0 ? (
               <div className="empty-card">아직 지원자가 없습니다.</div>
@@ -805,30 +821,49 @@ export default function Studio({
 
         {tab === 'applicants' && (
           <>
-            <p className="greet-sub">배역별 지원자를 한곳에서</p>
+            <button type="button" className="back-link applicants-back" onClick={backToProjects}>
+              ‹ 프로젝트
+            </button>
+            <p className="greet-sub">{role ? role.projectTitle : '프로젝트'}</p>
             <h1 className="page-title">지원자</h1>
             {role ? (
               <>
                 <div className="role-pick">
                   {Icon.clapper}
-                  <select
-                    aria-label="배역 선택"
-                    value={roleId}
-                    onChange={(event) => {
-                      setRoleId(event.target.value);
-                      setFilter('all');
-                      setSelectedId(null);
-                    }}
-                  >
-                    {roles.map((item) => (
-                      <option value={item.id} key={item.id}>
-                        {item.projectTitle} · {item.title}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="chevron" style={{ fontSize: 14 }}>
-                    ⌄
-                  </span>
+                  {projectRoles.length > 1 ? (
+                    <>
+                      <select
+                        aria-label="배역 선택"
+                        value={roleId}
+                        onChange={(event) => {
+                          setRoleId(event.target.value);
+                          setFilter('all');
+                          setSelectedId(null);
+                          // 같은 작품 안에서 배역만 바꾼 것이라 기록을 새로 쌓지 않고 주소만 맞춘다.
+                          history.replaceState(
+                            {
+                              __csTab: Boolean(
+                                (history.state as { __csTab?: boolean } | null)?.__csTab,
+                              ),
+                            },
+                            '',
+                            studioUrl('applicants', event.target.value),
+                          );
+                        }}
+                      >
+                        {projectRoles.map((item) => (
+                          <option value={item.id} key={item.id}>
+                            {item.title}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="chevron" style={{ fontSize: 14 }}>
+                        ⌄
+                      </span>
+                    </>
+                  ) : (
+                    <span>{role.title}</span>
+                  )}
                 </div>
                 <div className="role-banner" style={{ marginTop: 10 }}>
                   <div className="rb-top">
@@ -837,8 +872,8 @@ export default function Studio({
                         {role.title} <small>{role.isClosed ? '· 지원 마감' : '· 접수 중'}</small>
                       </strong>
                       <span>
-                        촬영 {formattedDate(role.shootDate)} · {role.location} ·{' '}
-                        {formattedDate(role.deadline)} 마감
+                        촬영 {formatDates(role.shootDates, 2) || formattedDate(role.shootDate)} ·{' '}
+                        {role.location} · {formattedDate(role.deadline)} 마감
                       </span>
                     </div>
                     <span className={`status-chip ${role.isClosed ? '' : 'chip-new'}`}>
@@ -850,14 +885,7 @@ export default function Studio({
                     <button onClick={() => window.open(`/apply/${role.slug}`, '_blank')}>
                       지원 화면 보기
                     </button>
-                    <button
-                      onClick={() => {
-                        setEditingRole(role);
-                        setCreateOpen(true);
-                      }}
-                    >
-                      정보 수정
-                    </button>
+                    {/* 배역 정보 수정은 '프로젝트 수정'에서 한다. */}
                     <button onClick={() => void toggleClosed(role)} disabled={busy}>
                       {role.isClosed ? '다시 열기' : '접수 마감'}
                     </button>
@@ -979,8 +1007,9 @@ export default function Studio({
               </>
             ) : (
               <div className="empty-card">
-                새 배역을 만들고
-                <br />첫 지원을 받아보세요.
+                프로젝트를 등록하면
+                <br />
+                배역별 지원자가 여기에 모여요.
               </div>
             )}
           </>
@@ -1137,14 +1166,6 @@ export default function Studio({
             <div className="menu-list">
               <a href="/studio/projects/new">{Icon.folder} 프로젝트 등록</a>
               <a href="/studio/actors">{Icon.search} 배우 찾기</a>
-              <button
-                onClick={() => {
-                  setEditingRole(null);
-                  setCreateOpen(true);
-                }}
-              >
-                {Icon.plus} 새 배역 만들기
-              </button>
               <button onClick={() => role && void shareRole(role)} disabled={!role}>
                 {Icon.upload} 지원 링크 공유
               </button>
@@ -1162,12 +1183,10 @@ export default function Studio({
         )}
       </div>
 
+      {/* 지원자 화면은 프로젝트 아래 화면이라 하단바에서는 [프로젝트]가 켜진다. */}
       <ProducerNav
-        active={tab}
-        onTab={(next) => {
-          setTab(next);
-          history.replaceState(null, '', next === 'home' ? '/studio' : `/studio?tab=${next}`);
-        }}
+        active={tab === 'applicants' ? 'home' : tab}
+        onTab={(next) => goTab(next)}
         badge={{ messages: unreadTotal > 0 }}
       />
 
@@ -1389,14 +1408,7 @@ export default function Studio({
       )}
 
       {chatId && (
-        <div
-          className="sheet-backdrop"
-          onClick={() => {
-            setChatId(null);
-            void loadApplications(roleId);
-            void loadExtras();
-          }}
-        >
+        <div className="sheet-backdrop" onClick={closeChat}>
           <section
             className="detail-sheet chat-sheet"
             role="dialog"
@@ -1419,133 +1431,9 @@ export default function Studio({
                   setSelectedId(chatId);
                   setChatId(null);
                 }}
-                onClose={() => {
-                  setChatId(null);
-                  void loadApplications(roleId);
-                  void loadExtras();
-                }}
+                onClose={closeChat}
               />
             )}
-          </section>
-        </div>
-      )}
-
-      {createOpen && (
-        <div className="sheet-backdrop" onClick={() => setCreateOpen(false)}>
-          <section
-            className="detail-sheet create-sheet"
-            role="dialog"
-            aria-modal="true"
-            aria-label="새 배역 만들기"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="sheet-handle" />
-            <div className="sheet-title">
-              <span>{editingRole ? '배역 정보 수정' : '새 배역 만들기'}</span>
-              <button onClick={() => setCreateOpen(false)} aria-label="닫기">
-                ×
-              </button>
-            </div>
-            <p className="muted">공유 전에 배우가 알아야 할 조건을 먼저 적어 주세요.</p>
-            <form key={editingRole?.id || 'new'} onSubmit={saveRole} className="role-form">
-              <label>
-                프로젝트명
-                <input
-                  name="projectTitle"
-                  required
-                  defaultValue={editingRole?.projectTitle}
-                  placeholder="예: 단편영화 〈봄날〉"
-                />
-              </label>
-              <label>
-                배역명
-                <input
-                  name="title"
-                  required
-                  defaultValue={editingRole?.title}
-                  placeholder="예: 민수 역"
-                />
-              </label>
-              <label>
-                배역 설명
-                <textarea
-                  name="description"
-                  required
-                  rows={3}
-                  defaultValue={editingRole?.description}
-                  placeholder="인물과 필요한 연기를 설명해 주세요"
-                />
-              </label>
-              <div className="form-two">
-                <label>
-                  촬영일
-                  <input
-                    name="shootDate"
-                    type="date"
-                    required
-                    defaultValue={editingRole?.shootDate}
-                  />
-                </label>
-                <label>
-                  지원 마감
-                  <input
-                    name="deadline"
-                    type="date"
-                    required
-                    defaultValue={editingRole?.deadline}
-                  />
-                </label>
-              </div>
-              <label>
-                촬영 지역
-                <input
-                  name="location"
-                  required
-                  defaultValue={editingRole?.location}
-                  placeholder="예: 서울 마포구"
-                />
-              </label>
-              <label>
-                출연료·교통·식비
-                <input
-                  name="pay"
-                  required
-                  defaultValue={editingRole?.pay}
-                  placeholder="예: 1일 15만 원, 교통비 별도"
-                />
-              </label>
-              <label>
-                필수 조건
-                <input
-                  name="requirement"
-                  defaultValue={editingRole?.requirement}
-                  placeholder="예: 촬영일 가능, 서울 이동 가능"
-                />
-              </label>
-              <div className="form-two">
-                <label>
-                  담당자
-                  <input
-                    name="contactName"
-                    required
-                    defaultValue={editingRole?.contactName}
-                    placeholder="제작팀"
-                  />
-                </label>
-                <label>
-                  결과 안내일
-                  <input
-                    name="announcementDate"
-                    type="date"
-                    required
-                    defaultValue={editingRole?.announcementDate}
-                  />
-                </label>
-              </div>
-              <button className="button button-primary full" disabled={busy}>
-                {editingRole ? '변경 내용 저장' : '배역 게시하기'}
-              </button>
-            </form>
           </section>
         </div>
       )}

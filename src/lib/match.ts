@@ -16,6 +16,13 @@ export type MatchRoleInput = {
   requirement: string;
   location: string;
   shootDate: string;
+  /** 배역 촬영일 전체. 있으면 shootDate 대신 모두 확인한다. */
+  shootDates?: string[];
+  /** 배역에 적은 성별 조건(male·female·any). 있으면 설명 글에서 추측하지 않는다. */
+  gender?: string;
+  /** 배역에 적은 연령대. 0이면 제한 없음. 있으면 설명 글의 '20대'보다 우선한다. */
+  ageMin?: number;
+  ageMax?: number;
 };
 
 export type MatchProfileInput = {
@@ -41,7 +48,16 @@ export function matchRoleForActor(
   let score = 0;
   const reasons: string[] = [];
 
-  if (/남성|남자/.test(text) || /여성|여자/.test(text)) {
+  // 성별: 배역에 적은 조건이 있으면 그것만 본다. '성별 무관'이면 설명 글에서도 추측하지 않는다.
+  const wantedGender = role.gender === 'male' || role.gender === 'female' ? role.gender : '';
+  if (wantedGender) {
+    if (profile.gender === wantedGender) {
+      score += 12;
+      reasons.push('성별 조건 부합');
+    } else {
+      score -= 12;
+    }
+  } else if (role.gender !== 'any' && (/남성|남자/.test(text) || /여성|여자/.test(text))) {
     const wantsMale = /남성|남자/.test(text);
     const wantsFemale = /여성|여자/.test(text);
     const matches =
@@ -55,8 +71,18 @@ export function matchRoleForActor(
   }
 
   const age = koreanAge(profile.birthYear, currentYear);
-  const decadeMatch = text.match(/(\d)0대/);
-  if (age !== null && decadeMatch) {
+  // 연령: 배역에 적은 연령대가 있으면 그것을, 없으면 설명 글의 '20대' 같은 표현을 본다.
+  const minAge = role.ageMin ?? 0;
+  const maxAge = role.ageMax ?? 0;
+  const decadeMatch = minAge > 0 || maxAge > 0 ? null : text.match(/(\d)0대/);
+  if (age !== null && (minAge > 0 || maxAge > 0)) {
+    if ((!minAge || age >= minAge) && (!maxAge || age <= maxAge)) {
+      score += 12;
+      reasons.push('연령 조건 부합');
+    } else {
+      score -= 8;
+    }
+  } else if (age !== null && decadeMatch) {
     if (decadeOf(age) === Number(decadeMatch[1]) * 10) {
       score += 12;
       reasons.push(`${decadeMatch[1]}0대 조건 부합`);
@@ -84,10 +110,20 @@ export function matchRoleForActor(
     reasons.push(`특기 일치 (${matchedSkills.slice(0, 3).join('·')})`);
   }
 
-  if (role.shootDate) {
-    if (profile.unavailableDates.includes(role.shootDate)) {
+  const shootDays = role.shootDates?.length
+    ? role.shootDates
+    : role.shootDate
+      ? [role.shootDate]
+      : [];
+  if (shootDays.length) {
+    const clashes = shootDays.filter((day) => profile.unavailableDates.includes(day));
+    if (clashes.length) {
       score -= 25;
-      reasons.push('촬영일과 출연 불가일 겹침');
+      reasons.push(
+        shootDays.length > 1
+          ? `촬영일과 출연 불가일 겹침 (${clashes.length}일)`
+          : '촬영일과 출연 불가일 겹침',
+      );
     } else {
       score += 5;
     }

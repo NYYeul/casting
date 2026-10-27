@@ -1,63 +1,198 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ProducerNav from '@/components/producer-nav';
+import {
+  FORMATS,
+  GENRE_TAGS,
+  PERKS,
+  PRODUCTION_TYPES,
+  PROJECT_REGIONS,
+  RELEASE_CHANNELS,
+  ROLE_GENDERS,
+  ROLE_TYPES,
+  ageRangeLabel,
+  splitLocation,
+} from '@/lib/project-meta';
+import { daysBetween, formatDates, formatPeriod, normalizeDates } from '@/lib/schedule';
 
-const GENRES = ['단편영화', '장편영화', '웹드라마', '숏폼', '광고', '뮤직비디오', '연극', '기타'];
-const STEPS = ['기본 정보', '배역 정보', '일정·조건', '확인'];
-// 수정 모드: 배역·지원 조건은 PATCH 범위 밖(지원 링크 관리에서 수정)이라 2단계만 사용
-const EDIT_STEPS = ['기본 정보', '확인'];
+// 등록과 수정이 같은 5단계를 쓴다. 배역 수정도 여기서 한다('수정'은 모두 프로젝트 수정에 모은다).
+const STEPS = ['작품 정보', '일정', '배역', '조건·담당', '확인'];
+const HINTS = {
+  create: [
+    '작품을 소개해 주세요. 배우가 지원 여부를 판단하고, 검색·추천에도 쓰입니다.',
+    '촬영만이 아니라 오디션·리딩까지 단계별 일정을 적어 주세요.',
+    '모집할 배역을 추가해 주세요. 배역마다 지원 링크가 따로 만들어집니다.',
+    '지원 일정과 출연 조건을 정해 주세요. 모든 배역에 똑같이 적용됩니다.',
+    '입력한 내용을 확인하고 게시하세요.',
+  ],
+  edit: [
+    '작품 정보를 수정합니다.',
+    '단계별 일정을 수정합니다. 작품 일정을 따르는 배역의 촬영일도 함께 바뀝니다.',
+    '배역을 수정하거나 새 배역을 추가합니다. 저장된 배역은 삭제 대신 접수를 마감할 수 있어요.',
+    '저장하면 이 작품의 모든 배역에 똑같이 반영됩니다.',
+    '수정할 내용을 확인하고 저장하세요.',
+  ],
+};
 const DRAFT_KEY = 'casting_project_draft';
+const MAX_ROLES = 20;
+// 촬영 기간이 이보다 길면 날짜를 칩으로 늘어놓지 않고 날짜 입력으로만 고른다.
+const MAX_DAY_CHIPS = 62;
 
-type RoleDraft = { title: string; description: string; requirement: string };
-type Draft = {
+export type RoleDraft = {
+  /** 화면에서 배역을 구분하는 값. 저장된 배역은 id와 같다. */
+  key: string;
+  id?: string;
+  isClosed?: boolean;
+  applicationCount?: number;
+  title: string;
+  description: string;
+  requirement: string;
+  roleType: string;
+  gender: string;
+  ageMin: string;
+  ageMax: string;
+  headcount: string;
+  shootMode: 'all' | 'custom';
+  shootDates: string[];
+};
+
+export type ProjectDraft = {
   title: string;
   genre: string;
+  genres: string[];
+  productionType: string;
+  runtime: string;
+  releaseChannels: string[];
+  releasePeriod: string;
+  company: string;
+  director: string;
+  producerName: string;
+  logline: string;
+  description: string;
+  region: string;
+  locationDetail: string;
+  auditionStart: string;
+  auditionEnd: string;
+  prepStart: string;
+  prepEnd: string;
   shootStart: string;
   shootEnd: string;
-  location: string;
-  description: string;
+  shootSessions: string;
   roles: RoleDraft[];
   deadline: string;
   announcementDate: string;
   pay: string;
+  perks: string[];
   contactName: string;
 };
 
-export type ProjectInitial = Pick<
-  Draft,
-  'title' | 'genre' | 'shootStart' | 'shootEnd' | 'location' | 'description'
->;
+let keySeq = 0;
+function newKey() {
+  keySeq += 1;
+  return `new-${Date.now().toString(36)}-${keySeq}`;
+}
 
-const blankRole = (): RoleDraft => ({ title: '', description: '', requirement: '' });
+function blankRole(): RoleDraft {
+  return {
+    key: newKey(),
+    title: '',
+    description: '',
+    requirement: '',
+    roleType: '',
+    gender: '',
+    ageMin: '',
+    ageMax: '',
+    headcount: '1',
+    shootMode: 'all',
+    shootDates: [],
+  };
+}
+
+function blankDraft(contactName: string): ProjectDraft {
+  return {
+    title: '',
+    genre: '단편영화',
+    genres: [],
+    productionType: '',
+    runtime: '',
+    releaseChannels: [],
+    releasePeriod: '',
+    company: '',
+    director: '',
+    producerName: '',
+    logline: '',
+    description: '',
+    region: '서울',
+    locationDetail: '',
+    auditionStart: '',
+    auditionEnd: '',
+    prepStart: '',
+    prepEnd: '',
+    shootStart: '',
+    shootEnd: '',
+    shootSessions: '',
+    roles: [blankRole()],
+    deadline: '',
+    announcementDate: '',
+    pay: '',
+    perks: [],
+    contactName,
+  };
+}
+
+/** 이 기기에 임시 저장한 내용을 불러온다. 예전 구조로 저장된 것도 빈칸만 채워서 쓴다. */
+function restoreDraft(saved: unknown, base: ProjectDraft): ProjectDraft {
+  if (!saved || typeof saved !== 'object') return base;
+  const raw = saved as Partial<ProjectDraft> & { location?: string };
+  const list = (value: unknown) =>
+    Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
+  const merged: ProjectDraft = {
+    ...base,
+    ...raw,
+    genres: list(raw.genres),
+    releaseChannels: list(raw.releaseChannels),
+    perks: list(raw.perks),
+    roles: (Array.isArray(raw.roles) && raw.roles.length ? raw.roles : [{}]).map((role) => ({
+      ...blankRole(),
+      ...(role as Partial<RoleDraft>),
+      id: undefined,
+      key: newKey(),
+      shootDates: list((role as Partial<RoleDraft>).shootDates),
+    })),
+  };
+  // 시·도 칸이 생기기 전의 임시 저장은 지역이 한 줄로 들어 있다.
+  if (raw.location && !raw.region) {
+    const split = splitLocation(raw.location);
+    merged.region = split.region || base.region;
+    merged.locationDetail = split.detail;
+  }
+  return merged;
+}
+
+function dayLabel(iso: string) {
+  const date = new Date(`${iso}T00:00:00Z`);
+  const weekday = ['일', '월', '화', '수', '목', '금', '토'][date.getUTCDay()];
+  return `${date.getUTCMonth() + 1}/${date.getUTCDate()}(${weekday})`;
+}
+
+function toggle(list: string[], value: string) {
+  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
 
 type Props = {
   contactName: string;
   /** 수정 모드: 프로젝트 id (없으면 신규 등록) */
   editId?: string;
-  /** 수정 모드: 기존 프로젝트 값 */
-  initial?: Partial<ProjectInitial>;
+  /** 수정 모드: 저장된 프로젝트와 배역 */
+  initial?: ProjectDraft;
 };
 
 export default function ProjectWizard({ contactName, editId, initial }: Props) {
   const isEdit = Boolean(editId);
-  const steps = isEdit ? EDIT_STEPS : STEPS;
   const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState<Draft>({
-    title: '',
-    genre: '단편영화',
-    shootStart: '',
-    shootEnd: '',
-    location: '',
-    description: '',
-    roles: [blankRole()],
-    deadline: '',
-    announcementDate: '',
-    pay: '',
-    contactName,
-    ...initial,
-  });
+  const [draft, setDraft] = useState<ProjectDraft>(() => initial ?? blankDraft(contactName));
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -67,7 +202,7 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
     try {
       const saved = localStorage.getItem(DRAFT_KEY);
       if (saved) {
-        setDraft((current) => ({ ...current, ...JSON.parse(saved) }));
+        setDraft((current) => restoreDraft(JSON.parse(saved), current));
         setNotice('임시 저장한 내용을 불러왔습니다.');
       }
     } catch {
@@ -75,31 +210,67 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
     }
   }, [isEdit]);
 
+  // 단계 이동을 브라우저 기록에 남긴다. 휴대폰 뒤로가기 = 이전 단계(입력 내용은 그대로).
+  useEffect(() => {
+    const onPop = () => {
+      const saved = (history.state as { __csStep?: number } | null)?.__csStep;
+      setStep(typeof saved === 'number' ? saved : 0);
+      setError('');
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  const projectDays = useMemo(
+    () => daysBetween(draft.shootStart, draft.shootEnd),
+    [draft.shootStart, draft.shootEnd],
+  );
+  const roleDays = (role: RoleDraft) =>
+    role.shootMode === 'custom' ? normalizeDates(role.shootDates) : projectDays;
+
   const set =
-    (key: keyof Draft) =>
+    (key: keyof ProjectDraft) =>
     (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setDraft((current) => ({ ...current, [key]: event.target.value }));
-  const setRole = (index: number, key: keyof RoleDraft, value: string) =>
+  const toggleIn = (key: 'genres' | 'releaseChannels' | 'perks', value: string) =>
+    setDraft((current) => ({ ...current, [key]: toggle(current[key], value) }));
+  const setRole = (key: string, patch: Partial<RoleDraft>) =>
     setDraft((current) => ({
       ...current,
-      roles: current.roles.map((role, i) => (i === index ? { ...role, [key]: value } : role)),
+      roles: current.roles.map((role) => (role.key === key ? { ...role, ...patch } : role)),
     }));
 
-  function problem() {
-    if (step === 0) {
+  function problem(target: number) {
+    if (target === 0) {
       if (!draft.title.trim()) return '작품명을 입력해 주세요.';
+      if (!FORMATS.includes(draft.genre)) return '형식을 골라 주세요.';
+      if (!PROJECT_REGIONS.includes(draft.region)) return '촬영 지역(시·도)을 골라 주세요.';
+      if (draft.region !== '미정' && !draft.locationDetail.trim())
+        return '촬영 지역의 상세 위치를 입력해 주세요.';
+    }
+    if (target === 1) {
+      if (draft.auditionStart && draft.auditionEnd && draft.auditionEnd < draft.auditionStart)
+        return '오디션 종료일이 시작일보다 빠릅니다.';
+      if (draft.prepStart && draft.prepEnd && draft.prepEnd < draft.prepStart)
+        return '리딩·리허설 종료일이 시작일보다 빠릅니다.';
       if (!draft.shootStart) return '촬영 시작일을 입력해 주세요.';
       if (draft.shootEnd && draft.shootEnd < draft.shootStart)
         return '촬영 종료일이 시작일보다 빠릅니다.';
-      if (!draft.location.trim()) return '촬영 지역을 입력해 주세요.';
     }
-    if (step === 1 && !isEdit) {
+    if (target === 2) {
       const filled = draft.roles.filter((role) => role.title.trim() || role.description.trim());
       if (filled.length === 0) return '배역을 하나 이상 입력해 주세요.';
-      if (filled.some((role) => !role.title.trim() || !role.description.trim()))
-        return '배역명과 배역 설명을 모두 입력해 주세요.';
+      for (const role of filled) {
+        if (!role.title.trim() || !role.description.trim())
+          return '배역명과 배역 설명을 모두 입력해 주세요.';
+        const min = Number(role.ageMin) || 0;
+        const max = Number(role.ageMax) || 0;
+        if (min > 0 && max > 0 && max < min) return `'${role.title}'의 연령대를 확인해 주세요.`;
+        if (role.shootMode === 'custom' && normalizeDates(role.shootDates).length === 0)
+          return `'${role.title}'의 촬영일을 하나 이상 골라 주세요.`;
+      }
     }
-    if (step === 2 && !isEdit) {
+    if (target === 3) {
       if (!draft.deadline || !draft.announcementDate)
         return '지원 마감일과 결과 안내일을 입력해 주세요.';
       if (draft.announcementDate < draft.deadline)
@@ -110,6 +281,19 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
     return '';
   }
 
+  function goStep(next: number) {
+    setStep(next);
+    history.pushState({ __csStep: next }, '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function previous() {
+    // 앞으로 갈 때마다 기록을 쌓았으니, 이전 단계는 뒤로가기와 같다.
+    if (((history.state as { __csStep?: number } | null)?.__csStep ?? 0) > 0) history.back();
+    else setStep((current) => Math.max(0, current - 1));
+    setError('');
+  }
+
   function saveDraft() {
     if (isEdit) return;
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
@@ -117,36 +301,49 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
   }
 
   async function next() {
-    const issue = problem();
+    const issue = problem(step);
     if (issue) {
       setError(issue);
       return;
     }
     setError('');
-    if (step < steps.length - 1) {
-      setStep(step + 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (step < STEPS.length - 1) {
+      goStep(step + 1);
       return;
+    }
+    // 마지막 확인 단계: 앞 단계를 다시 한 번 모두 확인한다.
+    for (let index = 0; index < STEPS.length - 1; index += 1) {
+      const earlier = problem(index);
+      if (earlier) {
+        setError(`${STEPS[index]}: ${earlier}`);
+        return;
+      }
     }
     setBusy(true);
     try {
       const response = await fetch('/api/projects', {
         method: isEdit ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: isEdit
-          ? JSON.stringify({
-              id: editId,
-              title: draft.title,
-              genre: draft.genre,
-              shootStart: draft.shootStart,
-              shootEnd: draft.shootEnd,
-              location: draft.location,
-              description: draft.description,
-            })
-          : JSON.stringify({
-              ...draft,
-              roles: draft.roles.filter((role) => role.title.trim()),
-            }),
+        body: JSON.stringify({
+          ...(isEdit ? { id: editId } : {}),
+          ...draft,
+          shootSessions: Number(draft.shootSessions) || 0,
+          roles: draft.roles
+            .filter((role) => role.title.trim() || role.description.trim())
+            .map((role) => ({
+              ...(role.id ? { id: role.id, isClosed: Boolean(role.isClosed) } : {}),
+              title: role.title,
+              description: role.description,
+              requirement: role.requirement,
+              roleType: role.roleType,
+              gender: role.gender,
+              ageMin: Number(role.ageMin) || 0,
+              ageMax: Number(role.ageMax) || 0,
+              headcount: Number(role.headcount) || 1,
+              shootMode: role.shootMode,
+              shootDates: role.shootMode === 'custom' ? normalizeDates(role.shootDates) : [],
+            })),
+        }),
       });
       const data = await response.json();
       if (response.status === 401) {
@@ -156,7 +353,8 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
       if (!response.ok)
         throw new Error(data.error || `프로젝트를 ${isEdit ? '수정' : '등록'}하지 못했습니다.`);
       if (!isEdit) localStorage.removeItem(DRAFT_KEY);
-      location.href = '/studio?tab=applicants';
+      // 단계 기록이 뒤로가기에 남지 않게 현재 기록을 바꿔 치운다.
+      location.replace('/studio');
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -167,6 +365,11 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
     }
   }
 
+  const sessions = Number(draft.shootSessions) || 0;
+  const shootSummary = projectDays.length
+    ? `${formatPeriod(draft.shootStart, draft.shootEnd)}${sessions ? ` · 총 ${sessions}회차` : ''}`
+    : '';
+
   return (
     <main className="app-shell wide">
       <ProducerNav active="new-project" />
@@ -176,7 +379,7 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
         </Link>
         <div className="wizard-shell">
           <ol className="wizard-steps vertical">
-            {steps.map((label, index) => (
+            {STEPS.map((label, index) => (
               <li key={label} className={index === step ? 'on' : index < step ? 'done' : ''}>
                 <b>{index < step ? '✓' : index + 1}</b>
                 <span>{label}</span>
@@ -188,26 +391,16 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
               {isEdit ? '프로젝트 수정' : '프로젝트 등록'}
             </h1>
             <p className="muted" style={{ marginBottom: 20 }}>
-              {
-                (isEdit
-                  ? [
-                      '프로젝트 기본 정보를 수정합니다. 배역·지원 조건은 지원 링크 관리에서 변경하세요.',
-                      '수정할 내용을 확인하고 저장하세요.',
-                    ]
-                  : [
-                      '프로젝트의 기본 정보를 입력해 주세요. 배우가 지원 여부를 판단하는 데 쓰입니다.',
-                      '모집할 배역을 추가해 주세요. 배역마다 지원 링크가 따로 만들어집니다.',
-                      '지원 일정과 출연 조건을 정해 주세요.',
-                      '입력한 내용을 확인하고 게시하세요.',
-                    ])[step]
-              }
+              {HINTS[isEdit ? 'edit' : 'create'][step]}
             </p>
             <div className="role-form">
               <p className="form-legend">
                 <em>*</em> 표시는 꼭 채워야 하는 항목이에요. 나머지는 나중에 채워도 됩니다.
               </p>
+
               {step === 0 && (
                 <>
+                  <h2 className="wiz-section">작품</h2>
                   <label>
                     작품명 <em>*</em>
                     <input
@@ -218,93 +411,473 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
                   </label>
                   <div className="form-two">
                     <label>
-                      장르 <i>선택</i>
+                      형식 <em>*</em>
                       <select value={draft.genre} onChange={set('genre')}>
-                        {GENRES.map((genre) => (
-                          <option key={genre}>{genre}</option>
+                        {!FORMATS.includes(draft.genre) && <option value="">골라 주세요</option>}
+                        {FORMATS.map((format) => (
+                          <option key={format}>{format}</option>
                         ))}
                       </select>
                     </label>
                     <label>
-                      촬영 지역 <em>*</em>
+                      제작 구분 <i>선택</i>
+                      <select value={draft.productionType} onChange={set('productionType')}>
+                        <option value="">선택 안 함</option>
+                        {Object.entries(PRODUCTION_TYPES).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <fieldset className="wiz-field">
+                    <legend>
+                      장르 <i>여러 개 선택</i>
+                    </legend>
+                    <div className="chip-pick">
+                      {GENRE_TAGS.map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          aria-pressed={draft.genres.includes(tag)}
+                          className={draft.genres.includes(tag) ? 'on' : ''}
+                          onClick={() => toggleIn('genres', tag)}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <div className="form-two">
+                    <label>
+                      분량 <i>선택</i>
                       <input
-                        value={draft.location}
-                        onChange={set('location')}
-                        placeholder="예: 서울 성동구"
+                        value={draft.runtime}
+                        onChange={set('runtime')}
+                        placeholder="예: 20분, 8부작"
+                      />
+                    </label>
+                    <label>
+                      공개 예정 시기 <i>선택</i>
+                      <input
+                        value={draft.releasePeriod}
+                        onChange={set('releasePeriod')}
+                        placeholder="예: 2027년 상반기"
                       />
                     </label>
                   </div>
+                  <fieldset className="wiz-field">
+                    <legend>
+                      공개처 <i>여러 개 선택</i>
+                    </legend>
+                    <div className="chip-pick">
+                      {Object.entries(RELEASE_CHANNELS).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={draft.releaseChannels.includes(value)}
+                          className={draft.releaseChannels.includes(value) ? 'on' : ''}
+                          onClick={() => toggleIn('releaseChannels', value)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+
+                  <h2 className="wiz-section">제작진</h2>
+                  <label>
+                    제작사·단체 <i>선택</i>
+                    <input
+                      value={draft.company}
+                      onChange={set('company')}
+                      placeholder="예: 한국영화아카데미, ○○필름"
+                    />
+                  </label>
                   <div className="form-two">
                     <label>
-                      촬영 시작일 <em>*</em>
-                      <input type="date" value={draft.shootStart} onChange={set('shootStart')} />
+                      연출 <i>선택</i>
+                      <input value={draft.director} onChange={set('director')} />
                     </label>
                     <label>
-                      촬영 종료일 <i>선택</i>
-                      <input type="date" value={draft.shootEnd} onChange={set('shootEnd')} />
+                      프로듀서 <i>선택</i>
+                      <input value={draft.producerName} onChange={set('producerName')} />
                     </label>
                   </div>
+
+                  <h2 className="wiz-section">소개</h2>
                   <label>
-                    작품 소개 <i>선택</i>
+                    한 줄 소개 <i>선택</i>
+                    <input
+                      value={draft.logline}
+                      onChange={set('logline')}
+                      maxLength={120}
+                      placeholder="예: 이별 후 처음 고향에 돌아온 청년의 하루"
+                    />
+                  </label>
+                  <label>
+                    시놉시스 <i>선택</i>
                     <textarea
                       rows={4}
                       value={draft.description}
                       onChange={set('description')}
-                      placeholder="작품의 줄거리, 분위기, 용도(졸업작품·영화제 출품 등)를 적어 주세요."
+                      placeholder="줄거리와 분위기, 참고 작품을 적어 주세요."
                     />
                   </label>
+
+                  <h2 className="wiz-section">촬영 지역</h2>
+                  <div className="form-two">
+                    <label>
+                      시·도 <em>*</em>
+                      <select value={draft.region} onChange={set('region')}>
+                        {!PROJECT_REGIONS.includes(draft.region) && (
+                          <option value="">골라 주세요</option>
+                        )}
+                        {PROJECT_REGIONS.map((region) => (
+                          <option key={region}>{region}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      상세 위치 {draft.region === '미정' ? <i>선택</i> : <em>*</em>}
+                      <input
+                        value={draft.locationDetail}
+                        onChange={set('locationDetail')}
+                        placeholder="예: 성동구"
+                      />
+                    </label>
+                  </div>
                 </>
               )}
-              {!isEdit && step === 1 && (
+
+              {step === 1 && (
                 <>
-                  {draft.roles.map((role, index) => (
-                    <div key={index} className="role-block">
-                      <div className="role-block-head">
-                        <strong>배역 {index + 1}</strong>
-                        {draft.roles.length > 1 && (
-                          <button
-                            type="button"
-                            className="text-button"
-                            onClick={() =>
-                              setDraft((current) => ({
-                                ...current,
-                                roles: current.roles.filter((_, i) => i !== index),
-                              }))
-                            }
-                          >
-                            삭제
-                          </button>
+                  <h2 className="wiz-section">오디션</h2>
+                  <div className="form-two">
+                    <label>
+                      시작일 <i>선택</i>
+                      <input
+                        type="date"
+                        value={draft.auditionStart}
+                        onChange={set('auditionStart')}
+                      />
+                    </label>
+                    <label>
+                      종료일 <i>선택</i>
+                      <input type="date" value={draft.auditionEnd} onChange={set('auditionEnd')} />
+                    </label>
+                  </div>
+                  <h2 className="wiz-section">리딩·리허설</h2>
+                  <div className="form-two">
+                    <label>
+                      시작일 <i>선택</i>
+                      <input type="date" value={draft.prepStart} onChange={set('prepStart')} />
+                    </label>
+                    <label>
+                      종료일 <i>선택</i>
+                      <input type="date" value={draft.prepEnd} onChange={set('prepEnd')} />
+                    </label>
+                  </div>
+                  <h2 className="wiz-section">촬영</h2>
+                  <div className="form-two">
+                    <label>
+                      시작일 <em>*</em>
+                      <input type="date" value={draft.shootStart} onChange={set('shootStart')} />
+                    </label>
+                    <label>
+                      종료일 <i>선택</i>
+                      <input type="date" value={draft.shootEnd} onChange={set('shootEnd')} />
+                    </label>
+                  </div>
+                  <label>
+                    총 회차 <i>선택</i>
+                    <input
+                      type="number"
+                      min={0}
+                      max={365}
+                      inputMode="numeric"
+                      value={draft.shootSessions}
+                      onChange={set('shootSessions')}
+                      placeholder="예: 3"
+                    />
+                  </label>
+                  <p className="wiz-note">
+                    배역 촬영일은 기본으로 이 촬영 기간을 그대로 따라요. 배역마다 날짜가 다르면 다음
+                    단계에서 따로 고를 수 있어요.
+                  </p>
+                </>
+              )}
+
+              {step === 2 && (
+                <>
+                  <div className="wiz-bulk">
+                    <span>
+                      작품 촬영 일정: <strong>{shootSummary || '미정'}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() =>
+                        setDraft((current) => ({
+                          ...current,
+                          roles: current.roles.map((role) => ({ ...role, shootMode: 'all' })),
+                        }))
+                      }
+                    >
+                      모든 배역에 일괄 적용
+                    </button>
+                  </div>
+                  {draft.roles.map((role, index) => {
+                    const extraDays = normalizeDates(role.shootDates).filter(
+                      (day) => !projectDays.includes(day),
+                    );
+                    return (
+                      <div key={role.key} className="role-block">
+                        <div className="role-block-head">
+                          <strong>
+                            배역 {index + 1}
+                            {role.id && (
+                              <small className="wiz-count">
+                                지원자 {role.applicationCount ?? 0}명
+                              </small>
+                            )}
+                          </strong>
+                          {role.id ? (
+                            <button
+                              type="button"
+                              className="text-button"
+                              onClick={() => setRole(role.key, { isClosed: !role.isClosed })}
+                            >
+                              {role.isClosed ? '접수 다시 열기' : '접수 마감'}
+                            </button>
+                          ) : (
+                            draft.roles.length > 1 && (
+                              <button
+                                type="button"
+                                className="text-button"
+                                onClick={() =>
+                                  setDraft((current) => ({
+                                    ...current,
+                                    roles: current.roles.filter((item) => item.key !== role.key),
+                                  }))
+                                }
+                              >
+                                삭제
+                              </button>
+                            )
+                          )}
+                        </div>
+                        {role.isClosed && (
+                          <p className="wiz-note">
+                            지원 접수를 마감한 배역이에요. 저장하면 반영돼요.
+                          </p>
                         )}
+                        <label>
+                          배역명 <em>*</em>
+                          <input
+                            value={role.title}
+                            onChange={(event) => setRole(role.key, { title: event.target.value })}
+                            placeholder="예: 민수 역"
+                          />
+                        </label>
+                        <div className="form-two">
+                          <label>
+                            비중 <i>선택</i>
+                            <select
+                              value={role.roleType}
+                              onChange={(event) =>
+                                setRole(role.key, { roleType: event.target.value })
+                              }
+                            >
+                              <option value="">선택 안 함</option>
+                              {Object.entries(ROLE_TYPES).map(([value, label]) => (
+                                <option key={value} value={value}>
+                                  {label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            성별 <i>선택</i>
+                            <select
+                              value={role.gender}
+                              onChange={(event) =>
+                                setRole(role.key, { gender: event.target.value })
+                              }
+                            >
+                              <option value="">선택 안 함</option>
+                              {Object.entries(ROLE_GENDERS).map(([value, label]) => (
+                                <option key={value} value={value}>
+                                  {label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                        <div className="form-two">
+                          <label>
+                            연령대 <i>선택</i>
+                            <span className="range-inputs">
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                inputMode="numeric"
+                                aria-label="최소 나이"
+                                value={role.ageMin}
+                                onChange={(event) =>
+                                  setRole(role.key, { ageMin: event.target.value })
+                                }
+                                placeholder="20"
+                              />
+                              <span aria-hidden>~</span>
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                inputMode="numeric"
+                                aria-label="최대 나이"
+                                value={role.ageMax}
+                                onChange={(event) =>
+                                  setRole(role.key, { ageMax: event.target.value })
+                                }
+                                placeholder="29"
+                              />
+                            </span>
+                          </label>
+                          <label>
+                            모집 인원
+                            <input
+                              type="number"
+                              min={1}
+                              max={999}
+                              inputMode="numeric"
+                              value={role.headcount}
+                              onChange={(event) =>
+                                setRole(role.key, { headcount: event.target.value })
+                              }
+                            />
+                          </label>
+                        </div>
+                        <label>
+                          배역 설명 <em>*</em>
+                          <textarea
+                            rows={3}
+                            value={role.description}
+                            onChange={(event) =>
+                              setRole(role.key, { description: event.target.value })
+                            }
+                            placeholder="인물의 성격과 필요한 연기를 적어 주세요."
+                          />
+                        </label>
+                        <label>
+                          {/* 항목 이름에 '필수'가 들어가 있어서, 입력 자체는 선택이라는 걸 따로 적어 준다 */}
+                          지원 필수 조건 <i>선택</i>
+                          <input
+                            value={role.requirement}
+                            onChange={(event) =>
+                              setRole(role.key, { requirement: event.target.value })
+                            }
+                            placeholder="예: 부산 사투리 가능"
+                          />
+                        </label>
+                        <fieldset className="wiz-field">
+                          <legend>촬영일</legend>
+                          <div className="seg-choice" role="group" aria-label="촬영일 정하는 방식">
+                            <button
+                              type="button"
+                              aria-pressed={role.shootMode === 'all'}
+                              className={role.shootMode === 'all' ? 'on' : ''}
+                              onClick={() => setRole(role.key, { shootMode: 'all' })}
+                            >
+                              작품 일정 그대로
+                            </button>
+                            <button
+                              type="button"
+                              aria-pressed={role.shootMode === 'custom'}
+                              className={role.shootMode === 'custom' ? 'on' : ''}
+                              onClick={() => setRole(role.key, { shootMode: 'custom' })}
+                            >
+                              이 배역만 따로 지정
+                            </button>
+                          </div>
+                          {role.shootMode === 'all' ? (
+                            <p className="wiz-note">
+                              {shootSummary
+                                ? `작품 촬영 일정(${shootSummary})을 그대로 따라요.`
+                                : '일정 단계에서 촬영 기간을 먼저 정해 주세요.'}
+                            </p>
+                          ) : (
+                            <>
+                              {projectDays.length > 0 && projectDays.length <= MAX_DAY_CHIPS && (
+                                <div className="chip-pick day-chips">
+                                  {projectDays.map((day) => (
+                                    <button
+                                      key={day}
+                                      type="button"
+                                      aria-pressed={role.shootDates.includes(day)}
+                                      className={role.shootDates.includes(day) ? 'on' : ''}
+                                      onClick={() =>
+                                        setRole(role.key, {
+                                          shootDates: toggle(role.shootDates, day),
+                                        })
+                                      }
+                                    >
+                                      {dayLabel(day)}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {extraDays.length > 0 && (
+                                <div className="chip-pick day-chips">
+                                  {extraDays.map((day) => (
+                                    <button
+                                      key={day}
+                                      type="button"
+                                      className="on"
+                                      aria-label={`${dayLabel(day)} 빼기`}
+                                      onClick={() =>
+                                        setRole(role.key, {
+                                          shootDates: role.shootDates.filter(
+                                            (item) => item !== day,
+                                          ),
+                                        })
+                                      }
+                                    >
+                                      {dayLabel(day)} ×
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              <label className="date-add">
+                                {projectDays.length > 0 && projectDays.length <= MAX_DAY_CHIPS
+                                  ? '촬영 기간 밖의 날짜 추가'
+                                  : '날짜 추가'}
+                                <input
+                                  type="date"
+                                  value=""
+                                  onChange={(event) => {
+                                    const day = event.target.value;
+                                    if (day && !role.shootDates.includes(day))
+                                      setRole(role.key, {
+                                        shootDates: [...role.shootDates, day],
+                                      });
+                                  }}
+                                />
+                              </label>
+                              <p className="wiz-note">
+                                {normalizeDates(role.shootDates).length
+                                  ? `고른 날짜: ${formatDates(role.shootDates, 4)}`
+                                  : '이 배역이 촬영하는 날을 하나 이상 골라 주세요.'}
+                              </p>
+                            </>
+                          )}
+                        </fieldset>
                       </div>
-                      <label>
-                        배역명 <em>*</em>
-                        <input
-                          value={role.title}
-                          onChange={(event) => setRole(index, 'title', event.target.value)}
-                          placeholder="예: 민수 역 (주연)"
-                        />
-                      </label>
-                      <label>
-                        배역 설명 <em>*</em>
-                        <textarea
-                          rows={3}
-                          value={role.description}
-                          onChange={(event) => setRole(index, 'description', event.target.value)}
-                          placeholder="성별·연령대, 성격, 필요한 연기를 적어 주세요."
-                        />
-                      </label>
-                      <label>
-                        {/* 항목 이름에 '필수'가 들어가 있어서, 입력 자체는 선택이라는 걸 따로 적어 준다 */}
-                        지원 필수 조건 <i>선택</i>
-                        <input
-                          value={role.requirement}
-                          onChange={(event) => setRole(index, 'requirement', event.target.value)}
-                          placeholder="예: 부산 사투리 가능, 촬영 3일 모두 참여"
-                        />
-                      </label>
-                    </div>
-                  ))}
-                  {draft.roles.length < 20 && (
+                    );
+                  })}
+                  {draft.roles.length < MAX_ROLES && (
                     <button
                       type="button"
                       className="button button-soft full"
@@ -320,7 +893,8 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
                   )}
                 </>
               )}
-              {!isEdit && step === 2 && (
+
+              {step === 3 && (
                 <>
                   <div className="form-two">
                     <label>
@@ -341,9 +915,27 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
                     <input
                       value={draft.pay}
                       onChange={set('pay')}
-                      placeholder="예: 1일 15만 원, 교통비·식비 별도 지급"
+                      placeholder="예: 회차당 15만 원, 교통비·식비 별도 지급"
                     />
                   </label>
+                  <fieldset className="wiz-field">
+                    <legend>
+                      제공 항목 <i>여러 개 선택</i>
+                    </legend>
+                    <div className="chip-pick">
+                      {Object.entries(PERKS).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={draft.perks.includes(value)}
+                          className={draft.perks.includes(value) ? 'on' : ''}
+                          onClick={() => toggleIn('perks', value)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
                   <label>
                     담당자 <em>*</em>
                     <input
@@ -352,68 +944,121 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
                       placeholder="예: 연출 이지현"
                     />
                   </label>
+                  <p className="wiz-note">
+                    지원 마감·결과 안내·출연료·담당자는 이 작품의 모든 배역에 똑같이 적용돼요.
+                  </p>
                 </>
               )}
-              {step === steps.length - 1 && (
+
+              {step === 4 && (
                 <div className="review-card">
                   <div>
                     <span>작품</span>
                     <strong>
                       {draft.title} · {draft.genre}
+                      {draft.genres.length > 0 && ` · ${draft.genres.join('·')}`}
+                    </strong>
+                  </div>
+                  {(draft.productionType || draft.runtime || draft.releaseChannels.length > 0) && (
+                    <div>
+                      <span>제작·공개</span>
+                      <strong>
+                        {[
+                          PRODUCTION_TYPES[draft.productionType],
+                          draft.runtime,
+                          draft.releaseChannels.map((value) => RELEASE_CHANNELS[value]).join('·'),
+                          draft.releasePeriod,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </strong>
+                    </div>
+                  )}
+                  {(draft.company || draft.director || draft.producerName) && (
+                    <div>
+                      <span>제작진</span>
+                      <strong>
+                        {[
+                          draft.company,
+                          draft.director && `연출 ${draft.director}`,
+                          draft.producerName && `PD ${draft.producerName}`,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </strong>
+                    </div>
+                  )}
+                  {draft.logline.trim() && (
+                    <div>
+                      <span>한 줄 소개</span>
+                      <strong>{draft.logline}</strong>
+                    </div>
+                  )}
+                  <div>
+                    <span>촬영 지역</span>
+                    <strong>
+                      {draft.region} {draft.locationDetail}
                     </strong>
                   </div>
                   <div>
-                    <span>촬영</span>
+                    <span>일정</span>
                     <strong>
-                      {draft.shootStart}
-                      {draft.shootEnd && draft.shootEnd !== draft.shootStart
-                        ? ` ~ ${draft.shootEnd}`
-                        : ''}{' '}
-                      · {draft.location}
+                      {[
+                        draft.auditionStart &&
+                          `오디션 ${formatPeriod(draft.auditionStart, draft.auditionEnd)}`,
+                        draft.prepStart &&
+                          `리딩·리허설 ${formatPeriod(draft.prepStart, draft.prepEnd)}`,
+                        shootSummary && `촬영 ${shootSummary}`,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
                     </strong>
                   </div>
-                  {draft.description.trim() && (
-                    <div>
-                      <span>소개</span>
-                      <strong>{draft.description}</strong>
-                    </div>
-                  )}
-                  {isEdit ? (
-                    <div>
-                      <span>배역·조건</span>
-                      <strong>배역 수정은 지원 링크 관리에서 진행하세요.</strong>
-                    </div>
-                  ) : (
-                    <>
-                      <div>
-                        <span>배역</span>
-                        <strong>
-                          {draft.roles
-                            .filter((role) => role.title.trim())
-                            .map((role) => role.title)
-                            .join(', ')}
-                        </strong>
-                      </div>
-                      <div>
-                        <span>지원 마감</span>
-                        <strong>{draft.deadline}</strong>
-                      </div>
-                      <div>
-                        <span>결과 안내</span>
-                        <strong>{draft.announcementDate}</strong>
-                      </div>
-                      <div>
-                        <span>조건</span>
-                        <strong>{draft.pay}</strong>
-                      </div>
-                      <div>
-                        <span>담당자</span>
-                        <strong>{draft.contactName}</strong>
-                      </div>
-                    </>
-                  )}
+                  <div>
+                    <span>배역</span>
+                    <strong className="review-roles">
+                      {draft.roles
+                        .filter((role) => role.title.trim())
+                        .map((role) => (
+                          <span key={role.key}>
+                            {[
+                              role.title,
+                              ROLE_TYPES[role.roleType],
+                              ROLE_GENDERS[role.gender],
+                              ageRangeLabel(Number(role.ageMin) || 0, Number(role.ageMax) || 0),
+                              `${Number(role.headcount) || 1}명`,
+                              `촬영 ${formatDates(roleDays(role)) || '미정'}`,
+                              role.isClosed && '접수 마감',
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </span>
+                        ))}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>지원 마감</span>
+                    <strong>{draft.deadline}</strong>
+                  </div>
+                  <div>
+                    <span>결과 안내</span>
+                    <strong>{draft.announcementDate}</strong>
+                  </div>
+                  <div>
+                    <span>조건</span>
+                    <strong>
+                      {draft.pay}
+                      {draft.perks.length > 0 &&
+                        ` · ${draft.perks.map((value) => PERKS[value]).join('·')} 제공`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>담당자</span>
+                    <strong>{draft.contactName}</strong>
+                  </div>
                 </div>
               )}
+
               {error && (
                 <p className="form-error" role="alert">
                   {error}
@@ -426,11 +1071,7 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
                   </button>
                 )}
                 {step > 0 && (
-                  <button
-                    type="button"
-                    className="button button-outline"
-                    onClick={() => setStep(step - 1)}
-                  >
+                  <button type="button" className="button button-outline" onClick={previous}>
                     이전
                   </button>
                 )}
@@ -440,13 +1081,13 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
                   disabled={busy}
                   onClick={() => void next()}
                 >
-                  {step === steps.length - 1
+                  {step === STEPS.length - 1
                     ? busy
                       ? isEdit
-                        ? '수정 중…'
+                        ? '저장 중…'
                         : '게시 중…'
                       : isEdit
-                        ? '수정하기'
+                        ? '수정 내용 저장'
                         : '프로젝트 게시하기'
                     : '다음 단계 →'}
                 </button>

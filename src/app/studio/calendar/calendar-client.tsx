@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import BackButton from '@/components/back-button';
 import ProducerNav from '@/components/producer-nav';
 // 클라이언트 번들에 DB(calendar.ts → node:sqlite)가 끌려가지 않도록 리프 모듈에서 가져온다
 import { MEETING_LABELS } from '@/lib/calendar-grid';
@@ -209,6 +210,7 @@ export default function CalendarClient({
     <main className="app-shell wide">
       <ProducerNav active="calendar" />
       <div className="screen-pad page-top">
+        <BackButton fallback="/studio?tab=profile" label="뒤로" />
         <h1 className="page-title">오디션 일정</h1>
         <div className={styles.toolbar}>
           <div className={styles.monthNav}>

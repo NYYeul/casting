@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { ProducerIntro } from '@/lib/accounts';
+import type { ProducerIntro, Project } from '@/lib/accounts';
+import {
+  PERKS,
+  PRODUCTION_TYPES,
+  RELEASE_CHANNELS,
+  ROLE_GENDERS,
+  ROLE_TYPES,
+  ageRangeLabel,
+} from '@/lib/project-meta';
+import { formatDates, formatPeriod } from '@/lib/schedule';
 import type { Role } from '@/lib/types';
 import { saveReceipt } from '@/lib/receipts';
 import { pushRecent, RECENT_ROLES } from '@/lib/recent';
@@ -21,13 +30,26 @@ export type Prefill = {
   unavailable: boolean;
 };
 
+/** 값이 있는 줄만 보여 준다. 칸이 생기기 전 공고는 예전처럼 기본 정보만 나온다. */
+function Row({ label, value }: { label: string; value: string }) {
+  if (!value) return null;
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
 export default function ApplyForm({
   role,
+  project,
   prefill,
   producer,
   proposalId,
 }: {
   role: Role;
+  project: Project | null;
   prefill: Prefill | null;
   producer: ProducerIntro | null;
   proposalId: string;
@@ -161,13 +183,61 @@ export default function ApplyForm({
               <br />
               함께해 주세요
             </h2>
+            {project?.logline && <p className="apply-logline">“{project.logline}”</p>}
             <p>{role.description}</p>
           </div>
+          {(role.roleType || role.gender || role.ageMin > 0 || role.ageMax > 0) && (
+            <section className="brief-card">
+              <h3>배역 조건</h3>
+              <Row label="비중" value={ROLE_TYPES[role.roleType] ?? ''} />
+              <Row label="성별" value={ROLE_GENDERS[role.gender] ?? ''} />
+              <Row label="연령대" value={ageRangeLabel(role.ageMin, role.ageMax)} />
+              <Row label="모집 인원" value={role.headcount > 1 ? `${role.headcount}명` : ''} />
+            </section>
+          )}
+          {project && (
+            <section className="brief-card">
+              <h3>작품 정보</h3>
+              <Row
+                label="형식·장르"
+                value={[project.genre, project.genres.join('·')].filter(Boolean).join(' · ')}
+              />
+              <Row label="제작 구분" value={PRODUCTION_TYPES[project.productionType] ?? ''} />
+              <Row label="분량" value={project.runtime} />
+              <Row
+                label="공개"
+                value={[
+                  project.releaseChannels.map((value) => RELEASE_CHANNELS[value]).join('·'),
+                  project.releasePeriod,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              />
+              <Row
+                label="제작진"
+                value={[
+                  project.company,
+                  project.director && `연출 ${project.director}`,
+                  project.producerName && `PD ${project.producerName}`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              />
+              <Row
+                label="오디션"
+                value={formatPeriod(project.auditionStart, project.auditionEnd)}
+              />
+              <Row label="리딩·리허설" value={formatPeriod(project.prepStart, project.prepEnd)} />
+            </section>
+          )}
           <section className="brief-card">
             <h3>촬영과 지원 조건</h3>
             <div>
               <span>촬영일</span>
-              <strong>{role.shootDate}</strong>
+              <strong>
+                {formatDates(role.shootDates, 4) || role.shootDate}
+                {project?.shootSessions ? ` · 총 ${project.shootSessions}회차` : ''}
+              </strong>
             </div>
             <div>
               <span>촬영 지역</span>
@@ -177,6 +247,10 @@ export default function ApplyForm({
               <span>출연료</span>
               <strong>{role.pay}</strong>
             </div>
+            <Row
+              label="제공"
+              value={(project?.perks ?? []).map((value) => PERKS[value]).join('·')}
+            />
             <div>
               <span>필수 조건</span>
               <strong>{role.requirement || '별도 조건 없음'}</strong>

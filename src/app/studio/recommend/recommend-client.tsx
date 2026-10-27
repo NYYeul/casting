@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import FindSwitch from '@/components/find-switch';
 import ProducerNav from '@/components/producer-nav';
 import { IMAGE_TAG_GROUPS, IMAGE_TAGS, REGIONS, SKILL_GROUPS, SKILLS } from '@/lib/profile';
+import { formatDates } from '@/lib/schedule';
 import styles from './recommend.module.css';
 
 type RecoActor = {
@@ -29,6 +30,7 @@ type AppliedBrief = {
   skills?: string[];
   keywords?: string[];
   shootDate?: string;
+  shootDates?: string[];
 };
 
 type RoleOption = { id: string; label: string };
@@ -41,7 +43,8 @@ function briefSummary(brief: AppliedBrief) {
   if (brief.region) items.push(brief.region);
   if (brief.tags?.length) items.push(...brief.tags);
   if (brief.skills?.length) items.push(...brief.skills);
-  if (brief.shootDate) items.push(`촬영일 ${brief.shootDate}`);
+  if (brief.shootDates?.length) items.push(`촬영일 ${formatDates(brief.shootDates)}`);
+  else if (brief.shootDate) items.push(`촬영일 ${brief.shootDate}`);
   return items;
 }
 

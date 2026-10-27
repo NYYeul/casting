@@ -4401,3 +4401,136 @@ img {
   background: radial-gradient(circle at 34% 30%, #fff 0%, #dcdff6 40%, #8f98c8 100%);
   box-shadow: 0 8px 16px #6f7db44d;
 }
+
+/* ── 제작자 화면 정리 ───────────────────────────── */
+/* 사이드바 로고는 첫 화면으로 가는 링크다. */
+.pnav-brand-link {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: inherit;
+}
+/* 버튼이 하나만 남은 줄은 한 줄을 다 쓴다. */
+.split-actions > :only-child {
+  grid-column: 1 / -1;
+}
+/* 지원자 화면 맨 위 '‹ 프로젝트' */
+.applicants-back {
+  display: inline-block;
+  margin: 8px 0 2px;
+  font-weight: 700;
+}
+
+/* ── 프로젝트 등록·수정 5단계 ───────────────────── */
+/* 작품 정보 단계를 작품·제작진·소개·지역으로 나누는 작은 제목 */
+.wiz-section {
+  margin: 10px 0 -4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+.wiz-section:first-of-type {
+  margin-top: 0;
+}
+/* 칩·선택 묶음은 fieldset으로 감싸 라벨과 같은 모양을 낸다 */
+.wiz-field {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.wiz-field legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #525862;
+}
+.wiz-field legend i {
+  font-style: normal;
+  font-size: 11px;
+  color: #9ea5b2;
+}
+.wiz-note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.wiz-count {
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+/* 배역 단계 맨 위: 작품 촬영 일정 + 일괄 적용 */
+.wiz-bulk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  font-size: 12px;
+}
+/* 두 가지 중 하나를 고르는 버튼(촬영일 정하는 방식) */
+.seg-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--lavender);
+}
+.seg-choice button {
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  padding: 9px 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.seg-choice button.on {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 1px 3px #0b0d1218;
+}
+.range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.range-inputs input {
+  min-width: 0;
+}
+.day-chips button {
+  padding: 7px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.date-add {
+  max-width: 260px;
+}
+.review-roles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: right;
+}
+/* 지원 화면: 작품 한 줄 소개 */
+.apply-logline {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}

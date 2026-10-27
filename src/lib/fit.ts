@@ -11,6 +11,8 @@ export type Brief = {
   skills?: string[];
   keywords?: string[];
   shootDate?: string;
+  /** 배역의 촬영일 전체. 있으면 shootDate 대신 이 날짜들을 모두 확인한다. */
+  shootDates?: string[];
 };
 
 // scoreActor가 요구하는 최소 프로필 형태. ActorProfile이 구조적으로 호환된다.
@@ -102,10 +104,20 @@ export function scoreActor(
     reasons.push(`소개글 키워드 일치 (${matchedKeywords.join('·')})`);
   }
 
-  if (brief.shootDate) {
-    if (profile.unavailableDates.includes(brief.shootDate)) {
+  const shootDays = brief.shootDates?.length
+    ? brief.shootDates
+    : brief.shootDate
+      ? [brief.shootDate]
+      : [];
+  if (shootDays.length) {
+    const clashes = shootDays.filter((day) => profile.unavailableDates.includes(day));
+    if (clashes.length) {
       score -= 25;
-      reasons.push('출연 불가일과 촬영일 겹침');
+      reasons.push(
+        shootDays.length > 1
+          ? `출연 불가일과 촬영일 겹침 (${clashes.length}일)`
+          : '출연 불가일과 촬영일 겹침',
+      );
     } else {
       score += 5;
       reasons.push('촬영 일정 문제없음');

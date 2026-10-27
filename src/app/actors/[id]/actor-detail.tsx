@@ -2,10 +2,12 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import BackButton from '@/components/back-button';
 import ProducerNav from '@/components/producer-nav';
 import type { ActorProfileFull } from '@/lib/accounts';
 import { ageOf, genderLabel } from '@/lib/profile';
 import { pushRecent, RECENT_ACTORS } from '@/lib/recent';
+import { useBackClose } from '@/lib/use-back-close';
 import { embedUrl } from '@/lib/video';
 
 type Tab = 'intro' | 'video' | 'filmo' | 'photos' | 'docs';
@@ -35,6 +37,8 @@ export default function ActorDetail({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  // 배역 제안 시트는 휴대폰 뒤로가기로 닫힌다.
+  useBackClose(proposeOpen, () => setProposeOpen(false));
   const age = ageOf(profile.birthYear);
 
   // 제작자가 본 배우만 '최근 본 배우'에 남긴다 (배우가 자기 프로필을 미리볼 때는 제외).
@@ -102,9 +106,11 @@ export default function ActorDetail({
     <main className="app-shell wide">
       {viewer === 'producer' && <ProducerNav active="actors" />}
       <div className="screen-pad page-top">
-        <Link className="back-link" href={viewer === 'producer' ? '/studio/actors' : '/me/profile'}>
-          ‹ {viewer === 'producer' ? '배우 검색' : '프로필 관리'}
-        </Link>
+        {/* 배우 검색·추천·팀 보드 등 어디서 왔든 그 화면으로 돌아간다. */}
+        <BackButton
+          fallback={viewer === 'producer' ? '/studio/actors' : '/me/profile'}
+          label={viewer === 'producer' ? '뒤로' : '프로필 관리'}
+        />
         {viewer === 'self' && (
           <div className="notice-bar">제작자에게 보이는 내 프로필 미리보기입니다.</div>
         )}
