@@ -667,3 +667,91 @@
     min-height: 320px;
   }
 }
+
+/* ── 사이버 단계 흐름: 01 검토 → 02 1차 합격 → 03 최종 후보 ── */
+.pipeline {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.pipeline li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-right: 10px;
+  min-width: 0;
+}
+/* 단계 사이 연결선 */
+.pipeline li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 9px;
+  left: 30px;
+  right: 6px;
+  height: 1px;
+  background: var(--line);
+}
+.pipeline b {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 18px;
+}
+.pipeline b::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--chrome);
+}
+.pipeline span {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pipeline em {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* 카드가 있는 단계는 라임 표시등이 켜진다 */
+.pipelineLive b {
+  color: var(--ink);
+}
+.pipelineLive b::before {
+  background: var(--lime);
+  box-shadow:
+    0 0 0 1px var(--obsidian),
+    0 0 6px var(--lime-glow);
+}
+.pipelineLive:not(:last-child)::after {
+  background: linear-gradient(90deg, var(--obsidian), var(--line));
+}
+.stepNo {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 6px;
+  padding: 2px 5px;
+}
+.columnCount {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}

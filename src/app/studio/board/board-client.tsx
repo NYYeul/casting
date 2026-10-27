@@ -122,6 +122,14 @@ const DOT: Record<ColumnKey, string> = {
   hold: styles.dotHold,
 };
 
+// 검토 → 1차 합격 → 최종 후보 흐름의 단계 번호. 보류는 흐름 밖이라 번호 대신 표시만 한다.
+const STEP: Record<ColumnKey, string> = {
+  review: '01',
+  passed: '02',
+  final: '03',
+  hold: '—',
+};
+
 async function api<T>(url: string, options?: RequestInit): Promise<T> {
   if (!navigator.onLine) throw new Error('연결이 끊겼습니다. 다시 연결한 뒤 시도해 주세요.');
   const response = await fetch(url, {
@@ -625,6 +633,22 @@ export default function BoardClient({ meId }: { meId: string }) {
 
             {boardLoading && <p className={styles.boardLoading}>보드를 불러오는 중…</p>}
             {!boardLoading && board && (
+              <ol className={styles.pipeline} aria-label="진행 단계">
+                {board.columns
+                  .filter((column) => column.key !== 'hold')
+                  .map((column) => (
+                    <li
+                      key={column.key}
+                      className={column.cards.length > 0 ? styles.pipelineLive : undefined}
+                    >
+                      <b>{STEP[column.key]}</b>
+                      <span>{column.title}</span>
+                      <em>{column.cards.length}</em>
+                    </li>
+                  ))}
+              </ol>
+            )}
+            {!boardLoading && board && (
               <div className={styles.board}>
                 {board.columns.map((column) => (
                   <section
@@ -640,6 +664,7 @@ export default function BoardClient({ meId }: { meId: string }) {
                     onDrop={(event) => onDrop(event, column.key)}
                   >
                     <header className={styles.columnHead}>
+                      <span className={styles.stepNo}>{STEP[column.key]}</span>
                       <span className={`${styles.columnDot} ${DOT[column.key]}`} />
                       <h2>{column.title}</h2>
                       <span className={styles.columnCount}>{column.cards.length}</span>
