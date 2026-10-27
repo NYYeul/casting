@@ -1,6 +1,4 @@
-import { dataDirectory } from '@/lib/data-directory';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readUpload } from '@/lib/storage';
 import { NextRequest, NextResponse } from 'next/server';
 
 const TYPES: Record<string, string> = {
@@ -15,8 +13,9 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ na
   const match = /^([a-f0-9-]{36})\.(jpg|png|webp|pdf)$/.exec(name);
   if (!match) return new NextResponse('Not found', { status: 404 });
   try {
-    const file = await readFile(join(dataDirectory(), 'uploads', name));
-    return new NextResponse(new Uint8Array(file), {
+    const body = await readUpload(name);
+    if (!body) return new NextResponse('Not found', { status: 404 });
+    return new NextResponse(body, {
       headers: {
         'Content-Type': TYPES[match[2]],
         'Cache-Control': 'private, max-age=86400',
