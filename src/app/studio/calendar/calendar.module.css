@@ -55,7 +55,7 @@
   font-weight: 700;
   border-radius: 12px;
   padding: 10px 15px;
-  box-shadow: 0 8px 18px #6c3df42e;
+  box-shadow: 0 8px 18px #0b0d122e;
 }
 
 /* ── 일정 추가 폼 ─────────────────────────────── */
@@ -115,7 +115,7 @@
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
-  outline: 2px solid var(--lavender-strong, #e6dcff);
+  outline: 2px solid var(--lavender-strong, #e9edf5);
   border-color: var(--primary);
 }
 
@@ -218,7 +218,7 @@
   color: #fff;
 }
 .tMute {
-  background: #d8d4e3;
+  background: #d6dae1;
   color: #fff;
 }
 .tAuto {

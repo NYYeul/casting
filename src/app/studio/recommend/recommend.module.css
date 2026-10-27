@@ -1,8 +1,8 @@
 .panel {
   background: var(--card);
   border-radius: 22px;
-  border: 1px solid #f2eefb;
-  box-shadow: 0 10px 30px rgba(23, 19, 33, 0.06);
+  border: 1px solid #f1f3f8;
+  box-shadow: 0 10px 30px rgba(11, 13, 18, 0.06);
   padding: 18px;
   display: flex;
   flex-direction: column;
@@ -12,7 +12,7 @@
 .label {
   font-size: 12px;
   font-weight: 800;
-  color: #565064;
+  color: #525862;
 }
 .field {
   display: flex;
@@ -23,7 +23,7 @@
 .field input,
 .field select,
 .field textarea {
-  border: 1px solid #e3dcf3;
+  border: 1px solid #e0e5ef;
   border-radius: 12px;
   padding: 11px 12px;
   font-size: 14px;
@@ -132,8 +132,8 @@
   position: relative;
   background: var(--card);
   border-radius: 22px;
-  border: 1px solid #f2eefb;
-  box-shadow: 0 10px 30px rgba(23, 19, 33, 0.06);
+  border: 1px solid #f1f3f8;
+  box-shadow: 0 10px 30px rgba(11, 13, 18, 0.06);
   padding: 16px;
   display: grid;
   grid-template-columns: 72px 1fr;
@@ -220,9 +220,9 @@
   padding: 10px 6px;
   font-size: 12px;
   font-weight: 700;
-  border: 1px solid #e3dcf3;
+  border: 1px solid #e0e5ef;
   background: #fff;
-  color: #565064;
+  color: #525862;
   text-align: center;
   display: inline-flex;
   align-items: center;
@@ -240,13 +240,13 @@
   background: var(--primary);
   border-color: var(--primary);
   color: #fff;
-  box-shadow: 0 6px 14px #6c3df42e;
+  box-shadow: 0 6px 14px #0b0d122e;
 }
 .empty {
   background: var(--card);
   border-radius: 22px;
-  border: 1px solid #f2eefb;
-  box-shadow: 0 10px 30px rgba(23, 19, 33, 0.06);
+  border: 1px solid #f1f3f8;
+  box-shadow: 0 10px 30px rgba(11, 13, 18, 0.06);
   padding: 44px 20px;
   text-align: center;
   color: var(--muted);

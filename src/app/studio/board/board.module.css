@@ -13,7 +13,7 @@
 .projectPill {
   border: 1px solid var(--line);
   background: #fff;
-  color: #565064;
+  color: #525862;
   border-radius: 20px;
   padding: 9px 15px;
   font-size: 12px;
@@ -33,7 +33,7 @@
   font-weight: 700;
   border-radius: 7px;
   padding: 2px 6px;
-  background: #f0eef5;
+  background: #eff1f4;
   color: var(--muted);
 }
 .projectPill.active .roleTag {
@@ -71,8 +71,8 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(145deg, #e6ddfb, #c4b3f0);
-  color: #fff;
+  background: linear-gradient(145deg, #e9edf5, #b9c2d0);
+  color: var(--obsidian);
   font-size: 13px;
   font-weight: 800;
   display: grid;
@@ -86,7 +86,7 @@
 .memberName {
   font-size: 10px;
   font-weight: 600;
-  color: #565064;
+  color: #525862;
   max-width: 52px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -102,7 +102,7 @@
 }
 .inviteBtn {
   flex: none;
-  border: 1.5px dashed #d8cdf5;
+  border: 1.5px dashed #cdd4e0;
   background: var(--lavender);
   color: var(--primary);
   border-radius: 14px;
@@ -121,7 +121,7 @@
 .inviteForm input {
   flex: 1;
   min-width: 0;
-  border: 1px solid #e5def2;
+  border: 1px solid #e1e6ef;
   border-radius: 12px;
   background: #fff;
   padding: 11px 13px;
@@ -130,7 +130,7 @@
 }
 .inviteForm input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px #6c3df418;
+  box-shadow: 0 0 0 3px #0b0d1218;
 }
 .inviteForm button {
   border: 0;
@@ -143,8 +143,8 @@
   white-space: nowrap;
 }
 .inviteForm .cancelBtn {
-  background: #f0eef5;
-  color: #6f6a80;
+  background: #eff1f4;
+  color: #6d727d;
   padding: 0 12px;
 }
 
@@ -155,7 +155,7 @@
   padding-bottom: 20px;
 }
 .column {
-  background: #f4f1fa;
+  background: #f3f5f8;
   border: 1px solid var(--line);
   border-radius: 20px;
   padding: 12px;
@@ -184,7 +184,7 @@
   flex: none;
 }
 .dotReview {
-  background: #8f7ff0;
+  background: #7c8ba8;
 }
 .dotPassed {
   background: #35b06f;
@@ -193,7 +193,7 @@
   background: #f0a92e;
 }
 .dotHold {
-  background: #b6b1c4;
+  background: #b3b8c2;
 }
 .columnHead h2 {
   font-size: 13px;
@@ -211,7 +211,7 @@
   padding: 2px 8px;
 }
 .emptyCol {
-  border: 1.5px dashed #ddd5ee;
+  border: 1.5px dashed #d9dfea;
   border-radius: 14px;
   color: var(--faint);
   font-size: 11px;
@@ -228,7 +228,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  box-shadow: 0 4px 14px #5a3ee60a;
+  box-shadow: 0 4px 14px #0b0d120a;
 }
 .card.dragging {
   opacity: 0.45;
@@ -244,8 +244,8 @@
   flex: none;
   border-radius: 50%;
   overflow: hidden;
-  background: linear-gradient(145deg, #e6ddfb, #c4b3f0);
-  color: #fff;
+  background: linear-gradient(145deg, #e9edf5, #b9c2d0);
+  color: var(--obsidian);
   font-size: 13px;
   font-weight: 800;
   display: grid;
@@ -285,7 +285,7 @@
 }
 .cardIntro {
   font-size: 12px;
-  color: #6f6a80;
+  color: #6d727d;
   line-height: 1.55;
   margin: 0;
   display: -webkit-box;
@@ -305,7 +305,7 @@
   flex: none;
 }
 .menuBtn:hover {
-  background: #f4f1fa;
+  background: #f3f5f8;
   color: var(--ink);
 }
 .moveMenu {
@@ -316,7 +316,7 @@
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 14px;
-  box-shadow: 0 12px 30px #17132126;
+  box-shadow: 0 12px 30px #0b0d1226;
   padding: 6px;
   min-width: 128px;
   display: flex;
@@ -334,7 +334,7 @@
   text-align: left;
   font-size: 12px;
   font-weight: 600;
-  color: #565064;
+  color: #525862;
   padding: 8px 10px;
   border-radius: 9px;
 }
@@ -362,7 +362,7 @@
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 700;
-  color: #8b8599;
+  color: #888d97;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -374,13 +374,13 @@
 }
 /* 카드에서 상세 패널을 여는 버튼 */
 .detailBtn {
-  border: 1px solid var(--line, #e5e0f0);
+  border: 1px solid var(--line, #e2e6ee);
   background: #fff;
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 10.5px;
   font-weight: 700;
-  color: #6f6a80;
+  color: #6d727d;
   cursor: pointer;
 }
 /* 카드 정렬 고르기 */
@@ -390,21 +390,21 @@
   gap: 6px;
   margin: 0 0 10px;
   font-size: 11.5px;
-  color: var(--muted, #6f6a80);
+  color: var(--muted, #6d727d);
 }
 .sortRow button {
-  border: 1px solid var(--line, #e5e0f0);
+  border: 1px solid var(--line, #e2e6ee);
   background: #fff;
   border-radius: 999px;
   padding: 5px 11px;
   font-size: 11.5px;
   font-weight: 700;
-  color: #6f6a80;
+  color: #6d727d;
   cursor: pointer;
 }
 .sortRow button.on {
-  background: var(--primary, #6c4df6);
-  border-color: var(--primary, #6c4df6);
+  background: var(--primary, #0b0d12);
+  border-color: var(--primary, #0b0d12);
   color: #fff;
 }
 /* 무엇이 팀 공유 값이고 무엇이 개인 값인지 알려 주는 안내 */
@@ -412,13 +412,13 @@
   margin: 0 0 12px;
   padding: 11px 13px;
   border-radius: 12px;
-  background: var(--lavender, #f1edfa);
+  background: var(--lavender, #f0f2f7);
   font-size: 11.5px;
   line-height: 1.75;
-  color: #5c5570;
+  color: #585f6d;
 }
 .sharedNote strong {
-  color: var(--ink, #241c3a);
+  color: var(--ink, #0b0d12);
 }
 /* 이 카드를 마지막으로 옮긴 사람 */
 .moveLog {
@@ -488,7 +488,7 @@
   margin: 3px 0 0;
   font-size: 12px;
   line-height: 1.55;
-  color: #4a4558;
+  color: #474c56;
   white-space: pre-wrap;
 }
 .noteForm {
@@ -498,7 +498,7 @@
 .noteForm input {
   flex: 1;
   min-width: 0;
-  border: 1px solid #e5def2;
+  border: 1px solid #e1e6ef;
   border-radius: 10px;
   background: #fff;
   padding: 9px 11px;
@@ -546,7 +546,7 @@
   border-radius: 7px;
   padding: 2px 6px;
   margin-left: 6px;
-  background: #f0eef5;
+  background: #eff1f4;
   color: var(--muted);
   vertical-align: 1px;
   white-space: nowrap;
@@ -567,8 +567,8 @@
   gap: 8px;
 }
 .noteForm .ghostBtn {
-  background: #f0eef5;
-  color: #6f6a80;
+  background: #eff1f4;
+  color: #6d727d;
 }
 
 /* ── 후보 배우 검색 시트 ────────────────────────── */
@@ -578,7 +578,7 @@
 }
 .pickerSearch {
   width: 100%;
-  border: 1px solid #e5def2;
+  border: 1px solid #e1e6ef;
   border-radius: 12px;
   background: var(--page);
   padding: 12px 14px;
@@ -587,7 +587,7 @@
 }
 .pickerSearch:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px #6c3df418;
+  box-shadow: 0 0 0 3px #0b0d1218;
   background: #fff;
 }
 .pickerList {
@@ -648,7 +648,7 @@
   padding: 8px 14px;
 }
 .pickerAdd:disabled {
-  background: #f0eef5;
+  background: #eff1f4;
   color: var(--faint);
 }
 

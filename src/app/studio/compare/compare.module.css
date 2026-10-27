@@ -6,7 +6,7 @@
   border-radius: 20px;
   padding: 16px;
   margin-bottom: 14px;
-  box-shadow: 0 8px 24px #5a3ee60d;
+  box-shadow: 0 8px 24px #0b0d120d;
 }
 .panelTitle {
   font-size: 13px;
@@ -64,7 +64,7 @@
 }
 .select {
   width: 100%;
-  border: 1px solid #e5def2;
+  border: 1px solid #e1e6ef;
   border-radius: 12px;
   background: var(--page);
   padding: 12px;
@@ -150,7 +150,7 @@
   flex: none;
   border-radius: 12px;
   overflow: hidden;
-  background: linear-gradient(160deg, #d9ccff, #a78bfa);
+  background: linear-gradient(160deg, #dce2ec, #9aa6bc);
   display: grid;
   place-items: center;
 }
@@ -206,7 +206,7 @@
 .progressFill {
   height: 100%;
   border-radius: 8px;
-  background: linear-gradient(90deg, #a78bfa, var(--primary));
+  background: var(--lime);
   transition: width 0.35s ease;
 }
 .duel {
@@ -227,7 +227,7 @@
   gap: 5px;
   text-align: center;
   overflow: hidden;
-  box-shadow: 0 8px 24px #5a3ee614;
+  box-shadow: 0 8px 24px #0b0d1214;
   transition:
     transform 0.18s ease,
     border-color 0.18s ease,
@@ -240,7 +240,7 @@
 .duelCard.picked {
   border-color: var(--primary);
   transform: scale(1.03);
-  box-shadow: 0 12px 32px #6c3df445;
+  box-shadow: 0 12px 32px #0b0d1245;
 }
 .duelCard:disabled:not(.picked) {
   opacity: 0.45;
@@ -273,8 +273,8 @@
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: linear-gradient(145deg, #8b5cf6, var(--primary-deep));
-  color: #fff;
+  background: var(--lime);
+  color: var(--obsidian);
   font-size: 15px;
   font-weight: 900;
   font-style: italic;
@@ -282,7 +282,7 @@
   place-items: center;
   box-shadow:
     0 0 0 5px #fff,
-    0 10px 24px #5527d866;
+    0 10px 24px #0b0d1266;
   z-index: 2;
   pointer-events: none;
 }
@@ -304,7 +304,7 @@
   padding-bottom: 18px;
   margin: 0 auto 16px;
   max-width: 340px;
-  box-shadow: 0 16px 40px #6c3df42b;
+  box-shadow: 0 16px 40px #0b0d122b;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -330,7 +330,7 @@
   margin-bottom: 12px;
 }
 .saveRow input {
-  border: 1px solid #e5def2;
+  border: 1px solid #e1e6ef;
   border-radius: 12px;
   background: var(--page);
   padding: 12px;

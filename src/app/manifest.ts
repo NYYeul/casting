@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: '모바일 캐스팅 지원·검토 도구',
     start_url: '/studio',
     display: 'standalone',
-    background_color: '#f7f8fc',
-    theme_color: '#f7f8fc',
+    background_color: '#f4f6fa',
+    theme_color: '#f4f6fa',
     icons: [
       { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
       { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
