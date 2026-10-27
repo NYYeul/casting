@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { Brand } from '@/components/brand';
 import { DemoEntry } from '@/components/demo-entry';
+import { demoFace } from '@/lib/demo-faces';
 import { getSession, homeFor } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-const collage = [12, 47, 5, 59, 25];
+const collage = [1, 2, 7, 6, 4];
 
 const values = [
   ['✦', '맞춤 추천', '배역 조건과 프로필을 비교해 적합도 순으로 제안'],
@@ -89,12 +90,7 @@ export default async function Landing() {
         <div className="lp-collage" aria-hidden>
           {collage.map((id, index) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={id}
-              className={`c${index}`}
-              src={`/avatars/p${String(((id - 1) % 20) + 1).padStart(2, '0')}.svg`}
-              alt=""
-            />
+            <img key={id} className={`c${index}`} src={demoFace(id)} alt="" />
           ))}
           <div className="lp-bubble">
             새로운 이야기를

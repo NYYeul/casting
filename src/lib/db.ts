@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { hashPassword } from './password';
 import type { Application, Audition, ChatMessage, PublicStage, ReviewStatus, Role } from './types';
+import { demoFace } from './demo-faces';
 
 let database: DatabaseSync | undefined;
 
@@ -186,7 +187,7 @@ function seedDemoActivity(connection: DatabaseSync) {
       intro: '단편 영화제 수상작에 출연했습니다. 감정선이 섬세한 연기를 보여드릴게요.',
       skill: '감정 연기, 영어',
       minutes: 35,
-      avatar: 61,
+      avatar: 9,
     },
     {
       roleId: ownedRoles[0].id,
@@ -196,7 +197,7 @@ function seedDemoActivity(connection: DatabaseSync) {
       intro: '뮤지컬 전공이라 노래와 연기 모두 자신 있습니다. 오디션 일정은 언제든 가능해요.',
       skill: '노래, 댄스',
       minutes: 190,
-      avatar: 62,
+      avatar: 1,
     },
     {
       roleId: (ownedRoles[1] ?? ownedRoles[0]).id,
@@ -206,7 +207,7 @@ function seedDemoActivity(connection: DatabaseSync) {
       intro: '독립 장편 경험이 많고 촬영 일정은 전부 비어 있습니다.',
       skill: '액션, 운전',
       minutes: 1500,
-      avatar: 63,
+      avatar: 6,
     },
   ];
   const insertApp = connection.prepare(
@@ -225,7 +226,7 @@ function seedDemoActivity(connection: DatabaseSync) {
       item.email,
       '010-7777-8888',
       item.intro,
-      `/avatars/p${String(((item.avatar - 1) % 20) + 1).padStart(2, '0')}.svg`,
+      demoFace(item.avatar),
       '',
       '전 일정 가능',
       '서울 외 이동 가능',
@@ -247,9 +248,7 @@ function seedDemoActivity(connection: DatabaseSync) {
   if (thread) {
     const marker = '지원서를 검토해 주셔서 감사합니다';
     const exists = connection
-      .prepare(
-        'SELECT 1 FROM chat_messages WHERE application_id=? AND body LIKE ?',
-      )
+      .prepare('SELECT 1 FROM chat_messages WHERE application_id=? AND body LIKE ?')
       .get(thread.id, `%${marker}%`);
     if (!exists) {
       const insertMsg = connection.prepare(
@@ -288,8 +287,7 @@ function seedDemoActivity(connection: DatabaseSync) {
   );
   const actorByEmail = (email: string) =>
     connection.prepare('SELECT id FROM users WHERE email=?').get(email) as
-      | { id: string }
-      | undefined;
+      { id: string } | undefined;
   const actor01 = actorByEmail('actor01@demo.casting');
   if (actor01 && ownedRoles[0])
     insertProposal.run(
@@ -898,24 +896,22 @@ function seedDemo(connection: DatabaseSync) {
     null,
   );
   const examples = [
-    ['김도윤', 26, '단편 3편, 독립영화 주연 경험', 'yes', 'new', 12],
-    ['박서연', 24, '독립영화 2편, 웹드라마 조연', 'yes', 'reviewing', 47],
-    ['이준호', 25, '단편 4편, 연극 무대 경험', 'unsure', 'interested', 59],
-    ['정하은', 23, '독립영화 조연, 연극 1편', 'yes', 'new', 44],
-    ['윤태오', 27, '단편 2편, 광고 다수 출연', 'yes', 'hold', 33],
-    ['한지민', 24, '웹드라마 주연, 단편 1편', 'unsure', 'new', 25],
+    ['김도윤', 26, '단편 3편, 독립영화 주연 경험', 'yes', 'new', 2],
+    ['박서연', 24, '독립영화 2편, 웹드라마 조연', 'yes', 'reviewing', 7],
+    ['이준호', 25, '단편 4편, 연극 무대 경험', 'unsure', 'interested', 9],
+    ['정하은', 23, '독립영화 조연, 연극 1편', 'yes', 'new', 4],
+    ['윤태오', 27, '단편 2편, 광고 다수 출연', 'yes', 'hold', 9],
+    ['한지민', 24, '웹드라마 주연, 단편 1편', 'unsure', 'new', 7],
   ] as const;
   for (const [name, age, introduction, available, status, photo] of examples) {
-    const avatar = (offset: number) =>
-      `/avatars/p${String(((photo - 1 + offset) % 20) + 1).padStart(2, '0')}.svg`;
     const application = createApplication(role.id, {
       name,
       age,
       email: `${randomBytes(4).toString('hex')}@example.com`,
       phone: '010-0000-0000',
       introduction,
-      photoUrl: avatar(0),
-      photoUrls: [avatar(0), avatar(1), avatar(2)],
+      photoUrl: demoFace(photo),
+      photoUrls: [demoFace(photo)],
       videoUrl: 'https://example.com/showreel',
       available,
       travel: 'yes',
@@ -986,7 +982,7 @@ function seedAccounts(connection: DatabaseSync) {
       '서울',
       ['소년미', '따뜻한', '차분한'],
       ['자연스러운 대화 연기', '영어'],
-      [12, 13, 14],
+      [2],
       '단편영화 3편 주연. 담백한 감정 연기를 좋아합니다.',
     ],
     [
@@ -997,7 +993,7 @@ function seedAccounts(connection: DatabaseSync) {
       '서울',
       ['청순한', '사랑스러운'],
       ['노래', '댄스'],
-      [47, 45, 44],
+      [7],
       '웹드라마 조연 2편, 뮤지컬 앙상블 경험이 있습니다.',
     ],
     [
@@ -1008,7 +1004,7 @@ function seedAccounts(connection: DatabaseSync) {
       '경기',
       ['시크한', '카리스마', '도시적인'],
       ['액션', '무술', '운전'],
-      [59, 60, 57],
+      [9],
       '액션스쿨 수료, 독립 장편 조연 출연.',
     ],
     [
@@ -1019,7 +1015,7 @@ function seedAccounts(connection: DatabaseSync) {
       '서울',
       ['유쾌한', '사랑스러운'],
       ['즉흥 연기', '사투리'],
-      [44, 43, 41],
+      [4],
       '연극 무대 4편, 코믹한 생활 연기가 강점입니다.',
     ],
     [
@@ -1030,7 +1026,7 @@ function seedAccounts(connection: DatabaseSync) {
       '서울',
       ['지적인', '차분한', '신비로운'],
       ['영어', '일본어'],
-      [5, 9, 10],
+      [8],
       '단편영화 〈여름의 끝〉 주연, 광고 다수 출연.',
     ],
     [
@@ -1041,7 +1037,7 @@ function seedAccounts(connection: DatabaseSync) {
       '서울',
       ['강인한', '카리스마'],
       ['액션', '수영'],
-      [33, 32, 31],
+      [6],
       '웹드라마 〈청춘시대〉 조연, 액션 장면 경험 다수.',
     ],
     [
@@ -1052,7 +1048,7 @@ function seedAccounts(connection: DatabaseSync) {
       '인천',
       ['따뜻한', '청순한'],
       ['자연스러운 대화 연기', '악기 연주'],
-      [25, 26, 24],
+      [7],
       '독립영화 2편, 피아노 연주가 가능합니다.',
     ],
     [
@@ -1063,7 +1059,7 @@ function seedAccounts(connection: DatabaseSync) {
       '경기',
       ['소년미', '유쾌한'],
       ['댄스', '즉흥 연기'],
-      [51, 52, 53],
+      [2],
       '연기 전공 재학 중, 숏폼 콘텐츠 출연 다수.',
     ],
     [
@@ -1074,7 +1070,7 @@ function seedAccounts(connection: DatabaseSync) {
       '부산',
       ['도시적인', '시크한'],
       ['사투리', '운전'],
-      [15, 17, 18],
+      [9],
       '부산 사투리 가능, 단편 5편 출연.',
     ],
     [
@@ -1085,7 +1081,7 @@ function seedAccounts(connection: DatabaseSync) {
       '서울',
       ['사랑스러운', '청순한'],
       ['노래'],
-      [16, 20, 23],
+      [4],
       '연기학원 수강생, 첫 작품을 찾고 있습니다.',
     ],
     [
@@ -1096,7 +1092,7 @@ function seedAccounts(connection: DatabaseSync) {
       '서울',
       ['시크한', '도시적인', '카리스마'],
       ['영어', '댄스'],
-      [29, 32, 36],
+      [1],
       '모델 활동 3년, 광고·뮤직비디오 출연.',
     ],
     [
@@ -1107,7 +1103,7 @@ function seedAccounts(connection: DatabaseSync) {
       '대전',
       ['지적인', '차분한'],
       ['자연스러운 대화 연기'],
-      [7, 8, 11],
+      [5],
       '연극 10년차, 독립 장편 주연 1편.',
     ],
     [
@@ -1118,7 +1114,7 @@ function seedAccounts(connection: DatabaseSync) {
       '경기',
       ['신비로운', '차분한'],
       ['일본어', '악기 연주'],
-      [38, 39, 48],
+      [8],
       '단편영화 2편, 일본어 원어민 수준.',
     ],
     [
@@ -1129,7 +1125,7 @@ function seedAccounts(connection: DatabaseSync) {
       '서울',
       ['따뜻한', '소년미'],
       ['수영', '노래'],
-      [54, 55, 56],
+      [2],
       '웹드라마 단역, 수영 강사 자격 보유.',
     ],
     [
@@ -1140,7 +1136,7 @@ function seedAccounts(connection: DatabaseSync) {
       '광주',
       ['따뜻한', '지적인'],
       ['사투리', '즉흥 연기'],
-      [49, 1, 31],
+      [3],
       '전라도 사투리 가능, 연극 6편.',
     ],
     [
@@ -1151,7 +1147,7 @@ function seedAccounts(connection: DatabaseSync) {
       '서울',
       ['강인한', '도시적인'],
       ['무술', '액션', '운전'],
-      [3, 4, 58],
+      [6],
       '무술 유단자, 액션 단편 3편.',
     ],
   ];
@@ -1187,11 +1183,7 @@ function seedAccounts(connection: DatabaseSync) {
           intro,
           JSON.stringify(tags),
           JSON.stringify(skills),
-          JSON.stringify(
-            photos.map(
-              (photo) => `/avatars/p${String(((photo - 1) % 20) + 1).padStart(2, '0')}.svg`,
-            ),
-          ),
+          JSON.stringify(photos.map((photo) => demoFace(photo))),
           'https://www.youtube.com/watch?v=ScMzIvxBSi4',
           JSON.stringify([
             {
