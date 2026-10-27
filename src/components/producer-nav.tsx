@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { BrandMark } from './brand';
+import { BrandLogo } from './brand';
 
 // 지원자 화면은 프로젝트 아래 화면이라 메뉴에 따로 두지 않는다(프로젝트 카드의 [지원자 검토하기]로 들어간다).
 export type ProducerSection =
@@ -117,8 +117,7 @@ export default function ProducerNav({
     <nav className="pnav" aria-label="제작자 메뉴">
       <div className="pnav-brand">
         <Link href="/" className="pnav-brand-link" aria-label="Casting Flow 첫 화면으로">
-          <BrandMark />
-          Casting Flow
+          <BrandLogo />
         </Link>
       </div>
       {items.map((item) => {

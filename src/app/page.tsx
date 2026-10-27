@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Brand } from '@/components/brand';
+import { Brand, BrandIcon, type BrandIconName } from '@/components/brand';
 import { DemoEntry } from '@/components/demo-entry';
 import { demoFace } from '@/lib/demo-faces';
 import { getSession, homeFor } from '@/lib/auth';
@@ -9,9 +9,9 @@ export const dynamic = 'force-dynamic';
 const collage = [1, 2, 7, 6, 4];
 
 const values = [
-  ['✦', '맞춤 추천', '배역 조건과 프로필을 비교해 적합도 순으로 제안'],
-  ['⚡', '빠른 검토', '카드·목록으로 지원자를 한 화면에서 비교'],
-  ['👥', '팀 협업', '감독·PD가 함께 후보를 정리'],
+  ['sparkle', '맞춤 추천', '배역 조건과 프로필을 비교해 적합도 순으로 제안'],
+  ['bolt', '빠른 검토', '카드·목록으로 지원자를 한 화면에서 비교'],
+  ['team', '팀 협업', '감독·PD가 함께 후보를 정리'],
 ];
 
 const features = [
@@ -67,7 +67,9 @@ export default async function Landing() {
           <div className="lp-values">
             {values.map(([icon, title, desc]) => (
               <div key={title}>
-                <span>{icon}</span>
+                <span>
+                  <BrandIcon name={icon as BrandIconName} size={26} />
+                </span>
                 <strong>{title}</strong>
                 <small>{desc}</small>
               </div>

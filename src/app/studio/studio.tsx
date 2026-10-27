@@ -6,6 +6,7 @@ import type { Application, Audition, PublicStage, ReviewStatus, Role } from '@/l
 import { publicLabels, reviewLabels } from '@/lib/types';
 import ChatThread from '@/components/chat-thread';
 import { NotifBell } from '@/components/notif-bell';
+import { BrandLogo } from '@/components/brand';
 import PhotoLightbox from '@/components/photo-lightbox';
 import ProducerNav from '@/components/producer-nav';
 import { formatDates } from '@/lib/schedule';
@@ -678,8 +679,7 @@ export default function Studio({
       )}
       <header className="home-header">
         <Link href="/" className="brand-word mobile-only" aria-label="Casting Flow 첫 화면으로">
-          {Icon.clapper}
-          Casting Flow
+          <BrandLogo />
         </Link>
         <span className="desk-only" />
         <NotifBell />

@@ -1,10 +1,23 @@
 'use client';
 
 import { useState } from 'react';
+import { BrandIcon, type BrandIconName } from './brand';
 
-const DEMOS = [
-  { key: 'producer', label: '🎬 제작자로 체험하기', email: 'producer@demo.casting', home: '/studio' },
-  { key: 'actor', label: '🎭 배우로 체험하기', email: 'actor01@demo.casting', home: '/me' },
+const DEMOS: { key: string; icon: BrandIconName; label: string; email: string; home: string }[] = [
+  {
+    key: 'producer',
+    icon: 'clapper',
+    label: '제작자로 체험하기',
+    email: 'producer@demo.casting',
+    home: '/studio',
+  },
+  {
+    key: 'actor',
+    icon: 'masks',
+    label: '배우로 체험하기',
+    email: 'actor01@demo.casting',
+    home: '/me',
+  },
 ];
 
 export function DemoEntry({ caption = '가입 없이 데모로 둘러보기' }: { caption?: string }) {
@@ -46,7 +59,14 @@ export function DemoEntry({ caption = '가입 없이 데모로 둘러보기' }: 
             onClick={() => enter(demo.email, demo.home)}
             disabled={!!busy}
           >
-            {busy === demo.email ? '입장 중…' : demo.label}
+            {busy === demo.email ? (
+              '입장 중…'
+            ) : (
+              <>
+                <BrandIcon name={demo.icon} size={20} />
+                {demo.label}
+              </>
+            )}
           </button>
         ))}
       </div>

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Brand } from '@/components/brand';
+import { Brand, BrandIcon } from '@/components/brand';
 import { DemoEntry } from '@/components/demo-entry';
 import { getSession, homeFor } from '@/lib/auth';
 
@@ -22,7 +22,9 @@ export default async function SignupChoice() {
         <p className="muted">당신의 역할을 선택하고, Casting Flow와 함께하세요.</p>
         <div className="role-cards">
           <Link href="/signup/producer" className="role-card">
-            <span className="role-art">🎬</span>
+            <span className="role-art">
+              <BrandIcon name="clapper" size={40} />
+            </span>
             <strong>제작자/감독</strong>
             <small>
               좋은 배우를 찾고,
@@ -32,7 +34,9 @@ export default async function SignupChoice() {
             <span className="button button-primary full sm">선택하기 →</span>
           </Link>
           <Link href="/signup/actor" className="role-card">
-            <span className="role-art">🎭</span>
+            <span className="role-art">
+              <BrandIcon name="masks" size={40} />
+            </span>
             <strong>배우</strong>
             <small>
               나의 가능성을 더 많은 작품과

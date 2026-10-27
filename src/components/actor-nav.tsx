@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { BrandMark } from './brand';
+import { BrandLogo } from './brand';
 
 const stroke = {
   width: 21,
@@ -23,8 +23,7 @@ export default function ActorNav({
   return (
     <nav className="pnav" aria-label="배우 메뉴">
       <div className="pnav-brand">
-        <BrandMark />
-        Casting Flow
+        <BrandLogo />
       </div>
       <Link href="/me" className={active === 'home' ? 'active' : ''}>
         <span className="nav-ic">

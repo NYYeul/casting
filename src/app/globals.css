@@ -4636,3 +4636,31 @@ img {
   color: var(--ink);
   box-shadow: 0 0 0 2px var(--ink);
 }
+
+/* ── 브랜드 이미지(캐릭터·글씨 로고·3D 아이콘) ─────── */
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.brand-mascot,
+.brand-icon {
+  flex: none;
+  display: inline-block;
+  object-fit: contain;
+  vertical-align: middle;
+}
+.brand-wordmark {
+  display: block;
+  width: auto;
+}
+/* 체험 버튼: 아이콘과 글자를 한 줄로 */
+.demo-row .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.notif-icon .brand-icon {
+  display: block;
+}

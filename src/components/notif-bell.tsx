@@ -2,6 +2,17 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { BrandIcon, type BrandIconName } from './brand';
+
+// 알림 아이콘 중 브랜드 3D 아이콘이 있는 것은 이미지로 보여 준다.
+const ICON_IMAGES: Record<string, BrandIconName> = {
+  '✨': 'sparkle',
+  '✦': 'sparkle',
+  '⚡': 'bolt',
+  '👥': 'team',
+  '🎬': 'clapper',
+  '🎭': 'masks',
+};
 
 type FeedItem = { id: string; icon: string; text: string; href: string; at: string };
 type Feed = { items: FeedItem[]; badge: number };
@@ -95,7 +106,13 @@ export function NotifBell() {
                   router.push(item.href);
                 }}
               >
-                <span className="notif-icon">{item.icon}</span>
+                <span className="notif-icon">
+                  {ICON_IMAGES[item.icon] ? (
+                    <BrandIcon name={ICON_IMAGES[item.icon]} size={20} />
+                  ) : (
+                    item.icon
+                  )}
+                </span>
                 <span className="notif-text">{item.text}</span>
                 <small>{timeAgo(item.at)}</small>
               </button>

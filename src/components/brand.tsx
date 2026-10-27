@@ -1,32 +1,46 @@
+/* eslint-disable @next/next/no-img-element */
 import Link from 'next/link';
 
-// 로고는 크롬 질감. 밝은 배경에서도 읽히도록 어두운 강철색에 빛 띠 하나를 지나가게 한다.
-export function BrandMark({ size = 22 }: { size?: number }) {
+// 브랜드 이미지는 public/brand에 있다. 크롬·라임 3D 아이콘과 CASTING FLOW 글씨 로고.
+export type BrandIconName = 'masks' | 'sparkle' | 'bolt' | 'team' | 'clapper' | 'mascot';
+
+/** 눈 달린 슬레이트 캐릭터. 로고의 아이콘 자리에 쓴다. */
+export function BrandMark({ size = 30 }: { size?: number }) {
+  return <img src="/brand/mascot.png" alt="" width={size} height={size} className="brand-mascot" />;
+}
+
+/** 캐릭터 + CASTING FLOW 글씨 로고. 화면 왼쪽 위 로고 자리에 쓴다. */
+export function BrandLogo({ size = 30 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
-      <defs>
-        <linearGradient id="cs-chrome" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#3a4254" />
-          <stop offset="0.42" stopColor="#0b0d12" />
-          <stop offset="0.55" stopColor="#9aa4b5" />
-          <stop offset="0.68" stopColor="#1c2230" />
-          <stop offset="1" stopColor="#0b0d12" />
-        </linearGradient>
-      </defs>
-      <path
-        fill="url(#cs-chrome)"
-        d="M20.2 5.6 4.9 3.4l.5-1.8a1 1 0 0 1 1.2-.7l14.6 2.2a1 1 0 0 1 .8 1.2l-.4 1.6a1 1 0 0 1-1.4.3Zm.3 2.9H3.5A1.5 1.5 0 0 0 2 10v9a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-9a1.5 1.5 0 0 0-1.5-1.5Z"
+    <span className="brand-logo">
+      <BrandMark size={size} />
+      <img
+        src="/brand/wordmark.png"
+        alt="Casting Flow"
+        className="brand-wordmark"
+        style={{ height: Math.round(size * 0.82) }}
       />
-      <circle cx="17.5" cy="15" r="1.6" fill="#c5ff45" />
-    </svg>
+    </span>
+  );
+}
+
+/** 이모지 대신 쓰는 3D 아이콘(🎭·✦·⚡·👥·🎬). */
+export function BrandIcon({ name, size = 24 }: { name: BrandIconName; size?: number }) {
+  return (
+    <img
+      src={`/brand/${name}.png`}
+      alt=""
+      aria-hidden
+      className="brand-icon"
+      style={{ width: size, height: size }}
+    />
   );
 }
 
 export function Brand({ href = '/' }: { href?: string }) {
   return (
     <Link href={href} className="brand-word" style={{ color: 'inherit' }}>
-      <BrandMark />
-      Casting Flow
+      <BrandLogo />
     </Link>
   );
 }

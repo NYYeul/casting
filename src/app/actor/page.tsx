@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { BrandLogo } from '@/components/brand';
 import { redirect } from 'next/navigation';
 import { formatDates } from '@/lib/schedule';
 import { getActorId } from '@/lib/auth';
@@ -21,10 +22,7 @@ export default async function ActorHome() {
     <main className="app-shell narrow">
       <header className="home-header">
         <Link href="/" className="brand-word" style={{ color: 'inherit' }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-            <path d="M20.2 5.6 4.9 3.4l.5-1.8a1 1 0 0 1 1.2-.7l14.6 2.2a1 1 0 0 1 .8 1.2l-.4 1.6a1 1 0 0 1-1.4.3Zm.3 2.9H3.5A1.5 1.5 0 0 0 2 10v9a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-9a1.5 1.5 0 0 0-1.5-1.5Z" />
-          </svg>
-          Casting Flow
+          <BrandLogo />
         </Link>
         <Link href="/" className="text-button">
           역할 바꾸기
