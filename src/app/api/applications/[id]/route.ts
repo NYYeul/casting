@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { applicationBoardAccess } from '@/lib/board';
 import { getProducerId } from '@/lib/auth';
-import { applicationOwnedBy, getApplication, reviewApplication } from '@/lib/db';
+import {
+  applicationOwnedBy,
+  getApplication,
+  markApplicationViewed,
+  reviewApplication,
+} from '@/lib/db';
 import type { PublicStage, ReviewStatus } from '@/lib/types';
 import { requiredText } from '@/lib/validation';
 
@@ -22,6 +27,8 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
     return NextResponse.json({ error: '지원서를 찾을 수 없습니다.' }, { status: 404 });
   if (access === 'denied')
     return NextResponse.json({ error: '볼 권한이 없습니다.' }, { status: 403 });
+  // 팀 보드에서 지원서를 열어 본 것도 열람이다. 배우에게는 '미열람 → 검토 중'으로 보인다.
+  await markApplicationViewed(id);
   const application = await getApplication(id);
   return application
     ? NextResponse.json({ application }, { headers: { 'Cache-Control': 'private, no-store' } })
@@ -35,6 +42,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if (!(await applicationOwnedBy(id, producerId)))
     return NextResponse.json({ error: '지원서를 찾을 수 없습니다.' }, { status: 404 });
   const body = await request.json().catch(() => ({}));
+  // 지원자 상세를 연 것만 알릴 때: { viewed: true }. 다른 값은 바꾸지 않는다.
+  if (body.viewed === true && Object.keys(body).length === 1) {
+    await markApplicationViewed(id);
+    const application = await getApplication(id);
+    return application
+      ? NextResponse.json({ application })
+      : NextResponse.json({ error: '지원서를 찾을 수 없습니다.' }, { status: 404 });
+  }
   const input: {
     status?: ReviewStatus;
     note?: string;

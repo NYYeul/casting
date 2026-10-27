@@ -56,7 +56,7 @@ async function initialize(database: Conn) {
   const migrated = await database
     .prepare(
       `SELECT 1 FROM information_schema.columns
-       WHERE table_schema = current_schema() AND table_name='roles' AND column_name='shoot_dates'`,
+       WHERE table_schema = current_schema() AND table_name='roles' AND column_name='special_note'`,
     )
     .get();
   if (!migrated) {
@@ -229,8 +229,13 @@ async function initialize(database: Conn) {
     await addColumn(database, 'roles', 'age_max', 'INTEGER NOT NULL DEFAULT 0');
     await addColumn(database, 'roles', 'headcount', 'INTEGER NOT NULL DEFAULT 1');
     await addColumn(database, 'roles', 'shoot_mode', "TEXT NOT NULL DEFAULT 'all'");
-    // 이 칸이 구조 변경 기준(맨 위 migrated)이라 반드시 마지막에 추가한다.
     await addColumn(database, 'roles', 'shoot_dates', list);
+    // 지원 현황 '미열람 → 검토 중': 제작진이 지원서를 처음 연 시각. 비어 있으면 미열람.
+    await addColumn(database, 'applications', 'viewed_at', 'TEXT');
+    // 특수 장면 안내(공고 필수 항목): 종류 목록과 구체적인 설명. ['none']이면 '특수 장면 없음'.
+    await addColumn(database, 'roles', 'special_scenes', list);
+    // 이 칸이 구조 변경 기준(맨 위 migrated)이라 반드시 마지막에 추가한다.
+    await addColumn(database, 'roles', 'special_note', text);
   }
   if (
     (process.env.NODE_ENV !== 'production' || process.env.DEMO_BUILD === 'true') &&
@@ -489,6 +494,8 @@ function roleFromRow(row: Record<string, unknown>): Role {
     ageMin: Number(row.age_min || 0),
     ageMax: Number(row.age_max || 0),
     headcount: Math.max(1, Number(row.headcount || 1)),
+    specialScenes: stringList(row.special_scenes),
+    specialNote: String(row.special_note ?? ''),
     location: String(row.location),
     pay: String(row.pay),
     deadline: String(row.deadline),
@@ -541,6 +548,7 @@ function appFromRow(row: Record<string, unknown>): Application {
     shortlist: Boolean(row.shortlist),
     chatOpen: Boolean(row.chat_open),
     publicStage: row.public_stage as PublicStage,
+    viewedAt: row.viewed_at ? String(row.viewed_at) : null,
     receiptToken: String(row.receipt_token),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
@@ -631,7 +639,15 @@ export async function getRoleById(id: string) {
 /** 배역을 구조화하는 칸. 넘기지 않으면 기본값이 들어간다(예전 '배역 빠르게 추가' API 등). */
 export type RoleDetails = Pick<
   Role,
-  'shootDates' | 'shootMode' | 'roleType' | 'gender' | 'ageMin' | 'ageMax' | 'headcount'
+  | 'shootDates'
+  | 'shootMode'
+  | 'roleType'
+  | 'gender'
+  | 'ageMin'
+  | 'ageMax'
+  | 'headcount'
+  | 'specialScenes'
+  | 'specialNote'
 >;
 
 export type NewRole = Pick<
@@ -662,8 +678,8 @@ export async function createRole(input: NewRole, ownerId: string | null, project
   await db()
     .prepare(
       `INSERT INTO roles (id,slug,owner_id,project_id,project_title,title,description,shoot_date,location,pay,deadline,contact_name,announcement_date,requirement,created_at,
-        role_type,gender,age_min,age_max,headcount,shoot_mode,shoot_dates)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        role_type,gender,age_min,age_max,headcount,shoot_mode,shoot_dates,special_scenes,special_note)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     )
     .run(
       id,
@@ -688,6 +704,8 @@ export async function createRole(input: NewRole, ownerId: string | null, project
       input.headcount ?? 1,
       input.shootMode ?? 'custom',
       JSON.stringify(shootDates),
+      JSON.stringify(input.specialScenes ?? []),
+      input.specialNote ?? '',
     );
   await recordEvent(id, null, 'role_published');
   return (await getRole(slug))!;
@@ -703,7 +721,8 @@ export async function updateRole(id: string, input: Partial<Role>) {
   await db()
     .prepare(
       `UPDATE roles SET project_title=?,title=?,description=?,shoot_date=?,location=?,pay=?,deadline=?,contact_name=?,announcement_date=?,requirement=?,is_closed=?,
-        role_type=?,gender=?,age_min=?,age_max=?,headcount=?,shoot_mode=?,shoot_dates=? WHERE id=?`,
+        role_type=?,gender=?,age_min=?,age_max=?,headcount=?,shoot_mode=?,shoot_dates=?,special_scenes=?,special_note=?
+        WHERE id=?`,
     )
     .run(
       input.projectTitle ?? current.projectTitle,
@@ -724,6 +743,8 @@ export async function updateRole(id: string, input: Partial<Role>) {
       input.headcount ?? current.headcount,
       shootMode,
       JSON.stringify(shootDates),
+      JSON.stringify(input.specialScenes ?? current.specialScenes),
+      input.specialNote ?? current.specialNote,
       id,
     );
   return await getRole(current.slug);
@@ -891,15 +912,17 @@ export async function reviewApplication(
   const current = await getApplication(id);
   if (!current) return null;
   const now = new Date().toISOString();
+  // 분류·메모·결과를 바꿨다면 지원서를 본 것이므로 열람 시각도 함께 남긴다(처음 한 번만).
   await db()
     .prepare(
-      'UPDATE applications SET status=?,note=?,shortlist=?,public_stage=?,updated_at=? WHERE id=?',
+      'UPDATE applications SET status=?,note=?,shortlist=?,public_stage=?,updated_at=?,viewed_at=COALESCE(viewed_at,?) WHERE id=?',
     )
     .run(
       input.status ?? current.status,
       input.note ?? current.note,
       Number(input.shortlist ?? current.shortlist),
       input.publicStage ?? current.publicStage,
+      now,
       now,
       id,
     );
@@ -910,6 +933,17 @@ export async function reviewApplication(
   if (input.publicStage && input.publicStage !== current.publicStage)
     await recordEvent(current.roleId, id, 'public_result_confirmed');
   return (await getApplication(id))!;
+}
+
+/**
+ * 제작진이 지원서를 처음 열었을 때 열람 시각을 남긴다. 배우에게는 '미열람 → 검토 중'으로 보인다.
+ * 이미 열람한 지원서는 그대로 둔다. 바뀌었으면 true.
+ */
+export async function markApplicationViewed(id: string) {
+  const result = await db()
+    .prepare('UPDATE applications SET viewed_at=? WHERE id=? AND viewed_at IS NULL')
+    .run(new Date().toISOString(), id);
+  return result.changes > 0;
 }
 
 export async function recordEvent(roleId: string, applicationId: string | null, name: string) {

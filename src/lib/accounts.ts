@@ -118,7 +118,15 @@ export type RoleEdit = Pick<NewRole, 'title' | 'description' | 'requirement'> &
   Required<
     Pick<
       NewRole,
-      'roleType' | 'gender' | 'ageMin' | 'ageMax' | 'headcount' | 'shootMode' | 'shootDates'
+      | 'roleType'
+      | 'gender'
+      | 'ageMin'
+      | 'ageMax'
+      | 'headcount'
+      | 'shootMode'
+      | 'shootDates'
+      | 'specialScenes'
+      | 'specialNote'
     >
   > & { id?: string; isClosed?: boolean };
 
@@ -500,6 +508,8 @@ function roleInput(project: ProjectInput, conditions: ProjectConditions, role: R
     ageMin: role.ageMin,
     ageMax: role.ageMax,
     headcount: role.headcount,
+    specialScenes: role.specialScenes,
+    specialNote: role.specialNote,
     location: project.location,
     ...conditions,
   };

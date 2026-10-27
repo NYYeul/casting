@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getApplicationByReceipt, getLatestOffer, getRoleById } from '@/lib/db';
-import { publicLabels } from '@/lib/types';
+import { actorStageInfo, actorStageOf, type ActorStage } from '@/lib/types';
 import ChatThread from '@/components/chat-thread';
 import OfferResponse from '@/components/offer-response';
 
@@ -88,16 +88,7 @@ export default async function StatusPage({ params }: { params: Promise<{ token: 
           </div>
           {application.chatOpen && <a href="#chat">대화 보기 ›</a>}
         </div>
-        <div className="status-card" style={{ marginTop: 14 }}>
-          <span className="status-orb">✓</span>
-          <div>
-            <strong>{publicLabels[application.publicStage]}</strong>
-            <p>
-              {application.name}님의 지원이{' '}
-              {application.publicStage === 'received' ? '접수되었습니다' : '진행 중입니다'}
-            </p>
-          </div>
-        </div>
+        <StageProgress stage={actorStageOf(application)} />
         {offer && <OfferResponse applicationId={application.id} receipt={token} offer={offer} />}
         <div className="info-panel">
           <div>
@@ -134,5 +125,42 @@ export default async function StatusPage({ params }: { params: Promise<{ token: 
         )}
       </div>
     </main>
+  );
+}
+
+// 지원 현황 단계: 미열람 → 검토 중 → 오디션 대상 → 결과(합격·불합격).
+const STAGE_STEPS: { key: ActorStage | 'result'; label: string }[] = [
+  { key: 'unread', label: '미열람' },
+  { key: 'reviewing', label: '검토 중' },
+  { key: 'audition', label: '오디션 대상' },
+  { key: 'result', label: '결과' },
+];
+
+function StageProgress({ stage }: { stage: ActorStage }) {
+  const done = stage === 'cast' || stage === 'not_selected';
+  const current = done ? 3 : STAGE_STEPS.findIndex((step) => step.key === stage);
+  const info = actorStageInfo[stage];
+  return (
+    <div className={`status-card stage-card stage-${stage}`} style={{ marginTop: 14 }}>
+      <div className="stage-head">
+        <span className="status-orb">{stage === 'not_selected' ? '·' : '✓'}</span>
+        <div>
+          <strong>{info.label}</strong>
+          <p>{info.message}</p>
+        </div>
+      </div>
+      <ol className="stage-steps" aria-label="지원 진행 단계">
+        {STAGE_STEPS.map((step, index) => (
+          <li
+            key={step.key}
+            className={index < current ? 'done' : index === current ? 'on' : ''}
+            aria-current={index === current ? 'step' : undefined}
+          >
+            <b>{index + 1}</b>
+            <span>{step.key === 'result' && done ? info.label : step.label}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }

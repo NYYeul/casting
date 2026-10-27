@@ -117,6 +117,40 @@ export function splitLocation(location: string, savedRegion = '') {
     : { region: '', detail: text };
 }
 
+/** '특수 장면 없음'을 뜻하는 값. 종류와 함께 고를 수 없다. */
+export const NO_SPECIAL_SCENE = 'none';
+
+/**
+ * 특수 장면 종류. 기획서의 공고 필수 항목이라 배역마다 '없음' 또는 종류를 꼭 고른다.
+ * 배우가 지원하기 전에 알아야 할 장면이다.
+ */
+export const SPECIAL_SCENES: Record<string, string> = {
+  nudity: '노출',
+  intimacy: '키스·신체 접촉',
+  violence: '폭력·격투',
+  stunt: '위험 액션·스턴트',
+  height_water: '고공·수중',
+  smoking: '흡연·음주',
+  other: '기타',
+};
+
+/** 특수 장면 값 정리: 종류를 하나라도 고르면 '없음'은 뺀다. 아무것도 없으면 빈 목록(아직 안내 안 함). */
+export function normalizeSpecialScenes(values: unknown): string[] {
+  const picked = pickKnown(values, [...Object.keys(SPECIAL_SCENES), NO_SPECIAL_SCENE]);
+  const kinds = picked.filter((value) => value !== NO_SPECIAL_SCENE);
+  if (kinds.length) return kinds;
+  return picked.includes(NO_SPECIAL_SCENE) ? [NO_SPECIAL_SCENE] : [];
+}
+
+/** 특수 장면 표시: '특수 장면 없음', '노출·흡연·음주', 안내 전이면 ''. */
+export function specialScenesLabel(values: string[]) {
+  if (values.includes(NO_SPECIAL_SCENE)) return '특수 장면 없음';
+  return values
+    .map((value) => SPECIAL_SCENES[value])
+    .filter(Boolean)
+    .join('·');
+}
+
 /** 정해진 목록에 있는 값만 남긴다(중복 제거). */
 export function pickKnown(values: unknown, allowed: readonly string[]): string[] {
   if (!Array.isArray(values)) return [];

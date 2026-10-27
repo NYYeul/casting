@@ -7,9 +7,9 @@ import type { ReviewStatus } from './types';
 export type BoardColumnKey = 'review' | 'passed' | 'final' | 'hold';
 
 export const BOARD_COLUMNS: { key: BoardColumnKey; title: string }[] = [
-  { key: 'review', title: '검토 중' },
-  { key: 'passed', title: '1차 합격' },
-  { key: 'final', title: '최종 후보' },
+  { key: 'review', title: '서류 검토' },
+  { key: 'passed', title: '서류 통과' },
+  { key: 'final', title: '오디션 후보' },
   { key: 'hold', title: '보류' },
 ];
 

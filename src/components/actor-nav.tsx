@@ -24,7 +24,7 @@ export default function ActorNav({
     <nav className="pnav" aria-label="배우 메뉴">
       <div className="pnav-brand">
         <BrandMark />
-        Casting Swipe
+        Casting Flow
       </div>
       <Link href="/me" className={active === 'home' ? 'active' : ''}>
         <span className="nav-ic">

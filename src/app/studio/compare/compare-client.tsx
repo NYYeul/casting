@@ -37,10 +37,10 @@ const SOURCES: { key: Source; label: string; hint: string }[] = [
   { key: 'role', label: '지원자 전체', hint: '제외 처리된 지원자는 빼고 비교합니다.' },
   {
     key: 'passed',
-    label: '1차 합격',
-    hint: '팀 보드에서 1차 합격으로 옮긴 지원자끼리 비교합니다.',
+    label: '서류 통과',
+    hint: '팀 보드에서 서류 통과로 옮긴 지원자끼리 비교합니다.',
   },
-  { key: 'final', label: '최종 후보', hint: '오디션 후보로 올린 지원자끼리 비교합니다.' },
+  { key: 'final', label: '오디션 후보', hint: '오디션 후보로 올린 지원자끼리 비교합니다.' },
   { key: 'favorites', label: '관심 배우', hint: '찜해 둔 배우들끼리 비교합니다.' },
   { key: 'actors', label: '전체 배우', hint: '공개 프로필 배우 전체가 대상입니다.' },
 ];
@@ -476,7 +476,7 @@ export default function CompareClient() {
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   maxLength={100}
-                  placeholder="예: 민수 역 최종 후보"
+                  placeholder="예: 민수 역 최종 선택"
                 />
               </label>
               <div className={styles.actionRow}>

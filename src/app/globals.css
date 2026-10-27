@@ -4534,3 +4534,105 @@ img {
   font-weight: 700;
   color: var(--ink);
 }
+
+/* ── 특수 장면 안내 ─────────────────────────────── */
+.wiz-field legend em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--primary);
+}
+/* 지원 화면: 해당 장면이 있으면 눈에 띄게 */
+.scene-card.has-scenes {
+  border-color: #f0a92e;
+  background: #fff8ea;
+}
+.scene-card .scene-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.scene-card .scene-empty {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* ── 지원 현황 단계: 미열람 → 검토 중 → 오디션 대상 → 결과 ── */
+.stage-card {
+  display: flex;
+  flex-direction: column;
+  /* 기본 status-card는 가운데 정렬이라, 단계 카드는 왼쪽부터 꽉 채운다 */
+  align-items: stretch;
+  gap: 14px;
+}
+.stage-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.stage-unread .status-orb {
+  background: var(--chrome);
+  color: var(--ink);
+}
+.stage-not_selected .status-orb {
+  background: var(--lavender);
+  color: var(--muted);
+}
+.stage-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.stage-steps li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+  text-align: center;
+}
+/* 단계 사이 연결선 */
+.stage-steps li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 11px;
+  left: calc(50% + 14px);
+  right: calc(-50% + 14px);
+  height: 2px;
+  background: var(--line);
+}
+.stage-steps li.done:not(:last-child)::after {
+  background: var(--ink);
+}
+.stage-steps b {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--lavender);
+  color: var(--muted);
+}
+.stage-steps li.done,
+.stage-steps li.on {
+  color: var(--ink);
+}
+.stage-steps li.done b {
+  background: var(--ink);
+  color: var(--lime);
+}
+.stage-steps li.on b {
+  background: var(--lime);
+  color: var(--ink);
+  box-shadow: 0 0 0 2px var(--ink);
+}

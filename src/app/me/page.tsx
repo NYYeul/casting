@@ -10,7 +10,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { listActorApplications, listOpenRoles } from '@/lib/db';
 import { matchRoleForActor } from '@/lib/match';
 import { profileCompletion } from '@/lib/profile';
-import { publicLabels } from '@/lib/types';
+import { actorStageInfo, actorStageOf } from '@/lib/types';
 import ProposalActions from './proposal-actions';
 
 export const dynamic = 'force-dynamic';
@@ -125,7 +125,7 @@ export default async function ActorHome() {
               <span className="txt">
                 {item.projectTitle} · {item.roleTitle}
                 <small>
-                  {publicLabels[item.publicStage]} ·{' '}
+                  {actorStageInfo[actorStageOf(item)].label} ·{' '}
                   {new Date(item.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}{' '}
                   접수
                 </small>

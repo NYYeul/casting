@@ -161,20 +161,24 @@ export async function actorFeed(
 
   const updates = (await db()
     .prepare(
-      `SELECT a.id, a.receipt_token, a.updated_at, a.public_stage, r.title role_title
+      `SELECT a.id, a.receipt_token, a.updated_at, a.viewed_at, a.public_stage, r.title role_title
        FROM applications a JOIN roles r ON r.id = a.role_id
-       WHERE a.actor_id = ? AND a.public_stage != 'received'
+       WHERE a.actor_id = ? AND (a.public_stage != 'received' OR a.viewed_at IS NOT NULL)
        ORDER BY a.updated_at DESC LIMIT 3`,
     )
     .all(actorId)) as Row[];
   for (const row of updates) {
-    const passed = row.public_stage !== 'rejected';
+    // 결과 전이지만 제작진이 지원서를 열어 봤으면 '검토 중' 알림을 보낸다(미열람 → 검토 중).
+    const viewedOnly = row.public_stage === 'received';
+    const passed = row.public_stage !== 'not_selected';
     items.push({
       id: `upd-${str(row.id)}`,
-      icon: passed ? '🎉' : '📢',
-      text: `‘${str(row.role_title)}’ 지원 결과가 업데이트됐어요`,
+      icon: viewedOnly ? '👀' : passed ? '🎉' : '📢',
+      text: viewedOnly
+        ? `‘${str(row.role_title)}’ 지원서를 제작진이 확인했어요`
+        : `‘${str(row.role_title)}’ 지원 결과가 업데이트됐어요`,
       href: `/status/${str(row.receipt_token)}`,
-      at: str(row.updated_at),
+      at: str(viewedOnly ? row.viewed_at : row.updated_at),
     });
   }
 

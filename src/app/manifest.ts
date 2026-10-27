@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: '캐스팅 스와이프',
+    name: '캐스팅플로우',
     short_name: '캐스팅',
     description: '모바일 캐스팅 지원·검토 도구',
     start_url: '/studio',

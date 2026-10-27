@@ -12,7 +12,11 @@ import {
   RELEASE_CHANNELS,
   ROLE_GENDERS,
   ROLE_TYPES,
+  NO_SPECIAL_SCENE,
+  SPECIAL_SCENES,
   ageRangeLabel,
+  normalizeSpecialScenes,
+  specialScenesLabel,
   splitLocation,
 } from '@/lib/project-meta';
 import { daysBetween, formatDates, formatPeriod, normalizeDates } from '@/lib/schedule';
@@ -56,6 +60,9 @@ export type RoleDraft = {
   headcount: string;
   shootMode: 'all' | 'custom';
   shootDates: string[];
+  /** 특수 장면 안내(필수): '없음' 또는 종류 */
+  specialScenes: string[];
+  specialNote: string;
 };
 
 export type ProjectDraft = {
@@ -107,6 +114,8 @@ function blankRole(): RoleDraft {
     headcount: '1',
     shootMode: 'all',
     shootDates: [],
+    specialScenes: [],
+    specialNote: '',
   };
 }
 
@@ -160,6 +169,7 @@ function restoreDraft(saved: unknown, base: ProjectDraft): ProjectDraft {
       id: undefined,
       key: newKey(),
       shootDates: list((role as Partial<RoleDraft>).shootDates),
+      specialScenes: list((role as Partial<RoleDraft>).specialScenes),
     })),
   };
   // 시·도 칸이 생기기 전의 임시 저장은 지역이 한 줄로 들어 있다.
@@ -268,6 +278,8 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
         if (min > 0 && max > 0 && max < min) return `'${role.title}'의 연령대를 확인해 주세요.`;
         if (role.shootMode === 'custom' && normalizeDates(role.shootDates).length === 0)
           return `'${role.title}'의 촬영일을 하나 이상 골라 주세요.`;
+        if (normalizeSpecialScenes(role.specialScenes).length === 0)
+          return `'${role.title}'의 특수 장면 안내를 골라 주세요. 없으면 '특수 장면 없음'을 고르면 돼요.`;
       }
     }
     if (target === 3) {
@@ -342,6 +354,8 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
               headcount: Number(role.headcount) || 1,
               shootMode: role.shootMode,
               shootDates: role.shootMode === 'custom' ? normalizeDates(role.shootDates) : [],
+              specialScenes: normalizeSpecialScenes(role.specialScenes),
+              specialNote: role.specialNote,
             })),
         }),
       });
@@ -782,6 +796,67 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
                             placeholder="예: 부산 사투리 가능"
                           />
                         </label>
+                        {/* 공고 필수 항목: 배우가 지원 전에 알아야 할 장면. '없음'도 직접 고르게 한다. */}
+                        <fieldset className="wiz-field">
+                          <legend>
+                            특수 장면 안내 <em>*</em>
+                          </legend>
+                          <div className="chip-pick">
+                            <button
+                              type="button"
+                              aria-pressed={role.specialScenes.includes(NO_SPECIAL_SCENE)}
+                              className={role.specialScenes.includes(NO_SPECIAL_SCENE) ? 'on' : ''}
+                              onClick={() =>
+                                setRole(role.key, {
+                                  specialScenes: role.specialScenes.includes(NO_SPECIAL_SCENE)
+                                    ? []
+                                    : [NO_SPECIAL_SCENE],
+                                  specialNote: '',
+                                })
+                              }
+                            >
+                              특수 장면 없음
+                            </button>
+                            {Object.entries(SPECIAL_SCENES).map(([value, label]) => {
+                              const on = role.specialScenes.includes(value);
+                              return (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  aria-pressed={on}
+                                  className={on ? 'on' : ''}
+                                  onClick={() =>
+                                    setRole(role.key, {
+                                      // 종류를 고르면 '없음'은 자동으로 풀린다.
+                                      specialScenes: toggle(
+                                        role.specialScenes.filter(
+                                          (item) => item !== NO_SPECIAL_SCENE,
+                                        ),
+                                        value,
+                                      ),
+                                    })
+                                  }
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {role.specialScenes.some((item) => item !== NO_SPECIAL_SCENE) && (
+                            <label>
+                              구체적인 안내 <i>선택</i>
+                              <textarea
+                                rows={2}
+                                maxLength={500}
+                                value={role.specialNote}
+                                onChange={(event) =>
+                                  setRole(role.key, { specialNote: event.target.value })
+                                }
+                                placeholder="예: 상반신 노출 1컷. 최소 인원만 있는 현장에서 촬영하고, 사전 리허설을 합니다."
+                              />
+                            </label>
+                          )}
+                        </fieldset>
                         <fieldset className="wiz-field">
                           <legend>촬영일</legend>
                           <div className="seg-choice" role="group" aria-label="촬영일 정하는 방식">
@@ -1028,6 +1103,7 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
                               ageRangeLabel(Number(role.ageMin) || 0, Number(role.ageMax) || 0),
                               `${Number(role.headcount) || 1}명`,
                               `촬영 ${formatDates(roleDays(role)) || '미정'}`,
+                              specialScenesLabel(normalizeSpecialScenes(role.specialScenes)),
                               role.isClosed && '접수 마감',
                             ]
                               .filter(Boolean)

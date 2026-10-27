@@ -75,6 +75,8 @@ export default async function EditProjectPage({ params }: Context) {
       headcount: String(role.headcount),
       shootMode: role.shootMode,
       shootDates: role.shootMode === 'custom' ? role.shootDates : [],
+      specialScenes: role.specialScenes,
+      specialNote: role.specialNote,
     })),
     deadline: first?.deadline ?? '',
     announcementDate: first?.announcementDate ?? '',

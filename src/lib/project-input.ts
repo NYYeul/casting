@@ -9,6 +9,8 @@ import {
   RELEASE_CHANNELS,
   ROLE_GENDERS,
   ROLE_TYPES,
+  NO_SPECIAL_SCENE,
+  normalizeSpecialScenes,
   pickKnown,
 } from './project-meta';
 import { isIsoDate, normalizeDates, resolveRoleDates } from './schedule';
@@ -116,6 +118,13 @@ export function parseProjectBody(body: Record<string, unknown>): Parsed {
       return { ok: false, error: `'${roleTitle}'의 촬영일을 하나 이상 골라 주세요.` };
     const roleType = String(raw.roleType ?? '');
     const gender = String(raw.gender ?? '');
+    // 특수 장면 안내는 공고 필수 항목이다. '없음'이라도 꼭 골라야 한다.
+    const specialScenes = normalizeSpecialScenes(raw.specialScenes);
+    if (specialScenes.length === 0)
+      return {
+        ok: false,
+        error: `'${roleTitle}'의 특수 장면 안내를 골라 주세요. 없으면 '특수 장면 없음'을 고르면 돼요.`,
+      };
     const id = requiredText(raw.id, 60);
     roles.push({
       ...(id ? { id } : {}),
@@ -128,6 +137,8 @@ export function parseProjectBody(body: Record<string, unknown>): Parsed {
       ageMin,
       ageMax,
       headcount: intIn(raw.headcount, 1, 999, 1),
+      specialScenes,
+      specialNote: specialScenes[0] === NO_SPECIAL_SCENE ? '' : requiredText(raw.specialNote, 500),
       shootMode,
       // 일괄 적용이면 작품 촬영 기간을 날짜로 펼쳐 저장한다(추천·지원 화면이 날짜를 바로 쓴다).
       shootDates: resolveRoleDates(shootMode, raw.shootDates, shootStart, shootEnd),

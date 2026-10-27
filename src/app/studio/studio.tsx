@@ -463,6 +463,23 @@ export default function Studio({
     setPendingPublicStage(null);
     setPhotoAt(null);
   }, [selectedId, selected?.note]);
+  // 지원자 상세를 처음 열면 '열람'으로 남긴다. 배우 화면에서는 '미열람 → 검토 중'으로 바뀐다.
+  const unviewedId = selected && !selected.viewedAt ? selected.id : null;
+  useEffect(() => {
+    if (!unviewedId) return;
+    void api<{ application: Application }>(`/api/applications/${unviewedId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ viewed: true }),
+    })
+      .then((result) =>
+        setApplications((current) =>
+          current.map((item) =>
+            item.id === unviewedId ? { ...item, viewedAt: result.application.viewedAt } : item,
+          ),
+        ),
+      )
+      .catch(() => undefined); // 열람 기록이 실패해도 상세 보기는 막지 않는다
+  }, [unviewedId]);
   // 뒤로가기·앞으로가기로 주소가 바뀌면 그 주소의 탭과 배역으로 화면을 맞춘다.
   useEffect(() => {
     const sync = () => {
@@ -660,9 +677,9 @@ export default function Studio({
         </div>
       )}
       <header className="home-header">
-        <Link href="/" className="brand-word mobile-only" aria-label="Casting Swipe 첫 화면으로">
+        <Link href="/" className="brand-word mobile-only" aria-label="Casting Flow 첫 화면으로">
           {Icon.clapper}
-          Casting Swipe
+          Casting Flow
         </Link>
         <span className="desk-only" />
         <NotifBell />
@@ -1178,7 +1195,7 @@ export default function Studio({
                 {Icon.out} 로그아웃
               </button>
             </div>
-            <p className="version-note">캐스팅 스와이프 MVP 0.2</p>
+            <p className="version-note">캐스팅플로우 MVP 0.2</p>
           </>
         )}
       </div>
@@ -1334,16 +1351,19 @@ export default function Studio({
             </div>
             <div className="detail-block public-block">
               <h3>배우에게 공개할 결과</h3>
-              <p>선택 후 저장하면 접수 현황 페이지에 표시됩니다.</p>
+              <p>
+                선택 후 저장하면 배우의 지원 현황에 표시됩니다. 결과를 정하기 전에는 배우에게{' '}
+                <strong>{selected.viewedAt ? '검토 중' : '미열람'}</strong>으로 보여요.
+              </p>
               <select
                 aria-label="배우 공개 상태"
                 value={pendingPublicStage ?? selected.publicStage}
                 onChange={(event) => setPendingPublicStage(event.target.value as PublicStage)}
               >
-                <option value="received">접수 완료</option>
+                <option value="received">결과 정하기 전 (검토 중)</option>
                 <option value="audition">오디션 대상</option>
-                <option value="not_selected">미선정</option>
-                <option value="cast">캐스팅 확정</option>
+                <option value="not_selected">불합격</option>
+                <option value="cast">합격</option>
               </select>
               {pendingPublicStage && pendingPublicStage !== selected.publicStage && (
                 <div className="public-confirm">

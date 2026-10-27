@@ -124,7 +124,7 @@ const DOT: Record<ColumnKey, string> = {
   hold: styles.dotHold,
 };
 
-// 검토 → 1차 합격 → 최종 후보 흐름의 단계 번호. 보류는 흐름 밖이라 번호 대신 표시만 한다.
+// 서류 검토 → 서류 통과 → 오디션 후보 흐름의 단계 번호. 보류는 흐름 밖이라 번호 대신 표시만 한다.
 const STEP: Record<ColumnKey, string> = {
   review: '01',
   passed: '02',
@@ -556,7 +556,7 @@ export default function BoardClient({ meId }: { meId: string }) {
 
             {board && (
               <p className={styles.sharedNote}>
-                <strong>단계(검토 중·1차 합격·최종 후보·보류)는 팀 전체가 함께 보는 값</strong>
+                <strong>단계(서류 검토·서류 통과·오디션 후보·보류)는 팀 전체가 함께 보는 값</strong>
                 이에요. 한 명이 옮기면 모두에게 똑같이 보이고, 카드에 누가 옮겼는지 남습니다.
                 <strong> ♥ 픽과 메모는 사람별</strong>로 쌓이고 이름이 함께 표시돼요.
               </p>

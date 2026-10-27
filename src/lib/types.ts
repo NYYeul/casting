@@ -26,6 +26,10 @@ export type Role = {
   ageMax: number;
   /** 모집 인원 */
   headcount: number;
+  /** 특수 장면 안내: SPECIAL_SCENES 키 목록. ['none']이면 '특수 장면 없음', 빈 목록이면 아직 안내 안 함. */
+  specialScenes: string[];
+  /** 특수 장면에 대한 구체적인 안내(촬영 방식·보호 조치 등) */
+  specialNote: string;
   location: string;
   pay: string;
   deadline: string;
@@ -65,6 +69,8 @@ export type Application = {
   shortlist: boolean;
   chatOpen: boolean;
   publicStage: PublicStage;
+  /** 제작진이 지원서를 처음 연 시각. null이면 미열람. */
+  viewedAt: string | null;
   receiptToken: string;
   createdAt: string;
   updatedAt: string;
@@ -111,9 +117,29 @@ export const reviewLabels: Record<ReviewStatus, string> = {
   excluded: '제외',
 };
 
+/** 제작자가 배우에게 공개하는 결과. 결과를 정하기 전(received)은 배우에게 '미열람·검토 중'으로 보인다. */
 export const publicLabels: Record<PublicStage, string> = {
-  received: '접수 완료',
+  received: '검토 중',
   audition: '오디션 대상',
-  not_selected: '미선정',
-  cast: '캐스팅 확정',
+  not_selected: '불합격',
+  cast: '합격',
 };
+
+/** 배우가 보는 지원 현황 단계(기획서: 미열람 → 검토 중 → 오디션 대상 → 합격·불합격). */
+export type ActorStage = 'unread' | 'reviewing' | 'audition' | 'cast' | 'not_selected';
+
+export const actorStageInfo: Record<ActorStage, { label: string; message: string }> = {
+  unread: { label: '미열람', message: '제작진이 아직 지원서를 열어 보지 않았어요.' },
+  reviewing: { label: '검토 중', message: '제작진이 지원서를 확인했어요. 검토 중이에요.' },
+  audition: { label: '오디션 대상', message: '오디션 대상이 되었어요. 일정 안내를 기다려 주세요.' },
+  cast: { label: '합격', message: '축하해요! 이 배역에 캐스팅되었어요.' },
+  not_selected: { label: '불합격', message: '아쉽지만 이번 배역에는 함께하지 못하게 되었어요.' },
+};
+
+/** 지원서의 공개 결과와 열람 여부로 배우에게 보여 줄 단계를 정한다. */
+export function actorStageOf(
+  application: Pick<Application, 'publicStage' | 'viewedAt'>,
+): ActorStage {
+  if (application.publicStage !== 'received') return application.publicStage;
+  return application.viewedAt ? 'reviewing' : 'unread';
+}
