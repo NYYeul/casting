@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
-import { DemoSwitch } from '@/components/demo-switch';
-import { getSession } from '@/lib/auth';
 
 export const metadata: Metadata = {
   title: '캐스팅 스와이프',
@@ -17,14 +15,10 @@ export const viewport: Viewport = {
   themeColor: '#f4f6fa',
 };
 
-export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const session = process.env.DEMO_MODE === 'true' ? await getSession() : null;
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ko">
-      <body>
-        {children}
-        {session && <DemoSwitch role={session.role} />}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
