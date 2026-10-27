@@ -27,16 +27,16 @@ function sortCap(items: ActivityItem[], cap = 10) {
   return items.sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, cap);
 }
 
-export function producerFeed(ownerId: string): ActivityFeed {
+export async function producerFeed(ownerId: string): Promise<ActivityFeed> {
   const items: ActivityItem[] = [];
 
-  const applications = db()
+  const applications = (await db()
     .prepare(
       `SELECT a.id, a.name, a.created_at, r.title role_title
        FROM applications a JOIN roles r ON r.id = a.role_id
        WHERE r.owner_id = ? ORDER BY a.created_at DESC LIMIT 6`,
     )
-    .all(ownerId) as Row[];
+    .all(ownerId)) as Row[];
   for (const row of applications) {
     items.push({
       id: `app-${str(row.id)}`,
@@ -47,7 +47,7 @@ export function producerFeed(ownerId: string): ActivityFeed {
     });
   }
 
-  const unread = db()
+  const unread = (await db()
     .prepare(
       `SELECT m.id, m.body, m.created_at, a.name actor_name
        FROM chat_messages m
@@ -59,7 +59,7 @@ export function producerFeed(ownerId: string): ActivityFeed {
             WHERE p.application_id = a.id AND p.sender = 'producer'), '')
        ORDER BY m.created_at DESC LIMIT 6`,
     )
-    .all(ownerId) as Row[];
+    .all(ownerId)) as Row[];
   for (const row of unread) {
     items.push({
       id: `msg-${str(row.id)}`,
@@ -70,7 +70,7 @@ export function producerFeed(ownerId: string): ActivityFeed {
     });
   }
 
-  const proposals = db()
+  const proposals = (await db()
     .prepare(
       `SELECT pr.id, pr.status, pr.created_at, u.name actor_name, r.title role_title
        FROM proposals pr
@@ -79,7 +79,7 @@ export function producerFeed(ownerId: string): ActivityFeed {
        WHERE pr.producer_id = ? AND pr.status != 'sent'
        ORDER BY pr.created_at DESC LIMIT 4`,
     )
-    .all(ownerId) as Row[];
+    .all(ownerId)) as Row[];
   for (const row of proposals) {
     const accepted = row.status === 'accepted';
     items.push({
@@ -91,13 +91,13 @@ export function producerFeed(ownerId: string): ActivityFeed {
     });
   }
 
-  const auditions = db()
+  const auditions = (await db()
     .prepare(
       `SELECT id, actor_name, starts_at FROM audition_events
        WHERE owner_id = ? AND status = 'confirmed' AND starts_at >= ?
        ORDER BY starts_at ASC LIMIT 3`,
     )
-    .all(ownerId, new Date().toISOString()) as Row[];
+    .all(ownerId, new Date().toISOString())) as Row[];
   for (const row of auditions) {
     const when = new Date(str(row.starts_at));
     items.push({
@@ -112,17 +112,20 @@ export function producerFeed(ownerId: string): ActivityFeed {
   return { items: sortCap(items), badge: unread.length };
 }
 
-export function actorFeed(actorId: string, profile: MatchProfileInput | null): ActivityFeed {
+export async function actorFeed(
+  actorId: string,
+  profile: MatchProfileInput | null,
+): Promise<ActivityFeed> {
   const items: ActivityItem[] = [];
   let badge = 0;
 
-  const proposals = db()
+  const proposals = (await db()
     .prepare(
       `SELECT pr.id, pr.created_at, r.title role_title, r.project_title
        FROM proposals pr JOIN roles r ON r.id = pr.role_id
        WHERE pr.actor_id = ? AND pr.status = 'sent' ORDER BY pr.created_at DESC LIMIT 4`,
     )
-    .all(actorId) as Row[];
+    .all(actorId)) as Row[];
   badge += proposals.length;
   for (const row of proposals) {
     items.push({
@@ -134,7 +137,7 @@ export function actorFeed(actorId: string, profile: MatchProfileInput | null): A
     });
   }
 
-  const messages = db()
+  const messages = (await db()
     .prepare(
       `SELECT m.id, m.body, m.created_at, a.receipt_token, r.title role_title
        FROM chat_messages m
@@ -143,7 +146,7 @@ export function actorFeed(actorId: string, profile: MatchProfileInput | null): A
        WHERE a.actor_id = ? AND m.sender = 'producer'
        ORDER BY m.created_at DESC LIMIT 4`,
     )
-    .all(actorId) as Row[];
+    .all(actorId)) as Row[];
   const recentWindow = Date.now() - 72 * 3600 * 1000;
   for (const row of messages) {
     if (new Date(str(row.created_at)).getTime() > recentWindow) badge += 1;
@@ -156,14 +159,14 @@ export function actorFeed(actorId: string, profile: MatchProfileInput | null): A
     });
   }
 
-  const updates = db()
+  const updates = (await db()
     .prepare(
       `SELECT a.id, a.receipt_token, a.updated_at, a.public_stage, r.title role_title
        FROM applications a JOIN roles r ON r.id = a.role_id
        WHERE a.actor_id = ? AND a.public_stage != 'received'
        ORDER BY a.updated_at DESC LIMIT 3`,
     )
-    .all(actorId) as Row[];
+    .all(actorId)) as Row[];
   for (const row of updates) {
     const passed = row.public_stage !== 'rejected';
     items.push({
@@ -177,12 +180,12 @@ export function actorFeed(actorId: string, profile: MatchProfileInput | null): A
 
   if (profile) {
     const since = new Date(Date.now() - 7 * 86400 * 1000).toISOString();
-    const roles = db()
+    const roles = (await db()
       .prepare(
         `SELECT slug, title, description, requirement, location, shoot_date, project_title, created_at
          FROM roles WHERE is_closed = 0 AND created_at >= ? ORDER BY created_at DESC`,
       )
-      .all(since) as Row[];
+      .all(since)) as Row[];
     const matched = roles
       .map((row) => ({
         row,

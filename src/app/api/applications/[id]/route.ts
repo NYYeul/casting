@@ -17,12 +17,12 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
   const userId = await getProducerId();
   if (!userId) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   const { id } = await context.params;
-  const access = applicationBoardAccess(id, userId);
+  const access = await applicationBoardAccess(id, userId);
   if (access === 'missing')
     return NextResponse.json({ error: '지원서를 찾을 수 없습니다.' }, { status: 404 });
   if (access === 'denied')
     return NextResponse.json({ error: '볼 권한이 없습니다.' }, { status: 403 });
-  const application = getApplication(id);
+  const application = await getApplication(id);
   return application
     ? NextResponse.json({ application }, { headers: { 'Cache-Control': 'private, no-store' } })
     : NextResponse.json({ error: '지원서를 찾을 수 없습니다.' }, { status: 404 });
@@ -32,7 +32,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const producerId = await getProducerId();
   if (!producerId) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   const { id } = await context.params;
-  if (!applicationOwnedBy(id, producerId))
+  if (!(await applicationOwnedBy(id, producerId)))
     return NextResponse.json({ error: '지원서를 찾을 수 없습니다.' }, { status: 404 });
   const body = await request.json().catch(() => ({}));
   const input: {
@@ -57,7 +57,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       return NextResponse.json({ error: '공개 상태가 올바르지 않습니다.' }, { status: 400 });
     input.publicStage = body.publicStage;
   }
-  const application = reviewApplication(id, input);
+  const application = await reviewApplication(id, input);
   return application
     ? NextResponse.json({ application })
     : NextResponse.json({ error: '지원서를 찾을 수 없습니다.' }, { status: 404 });

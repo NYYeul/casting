@@ -9,7 +9,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   const body = await request.json().catch(() => ({}));
   if (body.status !== 'declined')
     return NextResponse.json({ error: '요청이 올바르지 않습니다.' }, { status: 400 });
-  return setProposalStatus(id, actorId, 'declined')
+  return (await setProposalStatus(id, actorId, 'declined'))
     ? NextResponse.json({ ok: true })
     : NextResponse.json({ error: '처리할 수 없는 제안입니다.' }, { status: 409 });
 }

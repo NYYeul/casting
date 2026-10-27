@@ -25,12 +25,12 @@ export default async function ActorHome() {
   const user = await getCurrentUser();
   if (!user) redirect('/login?next=/me');
   if (user.role !== 'actor') redirect('/studio');
-  const profile = getProfile(user.id);
+  const profile = await getProfile(user.id);
   const completion = profile ? profileCompletion(profile) : 0;
-  const proposals = listActorProposals(user.id);
-  const applications = listActorApplications(user.id);
+  const proposals = await listActorProposals(user.id);
+  const applications = await listActorApplications(user.id);
   const appliedRoleIds = new Set(applications.map((item) => item.roleId));
-  const roles = listOpenRoles(new Date().toISOString().slice(0, 10));
+  const roles = await listOpenRoles(new Date().toISOString().slice(0, 10));
   const matched = profile
     ? roles
         .map((role) => ({ role, fit: matchRoleForActor(profile, role) }))

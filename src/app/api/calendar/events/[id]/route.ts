@@ -51,10 +51,12 @@ export async function PATCH(request: NextRequest, context: Context) {
       return NextResponse.json({ error: '일시 형식이 올바르지 않습니다.' }, { status: 400 });
     input.startsAt = startsAt;
   }
-  const event = updateEvent(producerId, id, input);
+  const event = await updateEvent(producerId, id, input);
   if (!event) return NextResponse.json({ error: '일정을 찾을 수 없습니다.' }, { status: 404 });
   const conflict =
-    input.startsAt !== undefined ? findTimeConflict(producerId, event.startsAt, event.id) : null;
+    input.startsAt !== undefined
+      ? await findTimeConflict(producerId, event.startsAt, event.id)
+      : null;
   return NextResponse.json(conflict ? { event, conflict } : { event });
 }
 
@@ -62,7 +64,7 @@ export async function DELETE(_request: NextRequest, context: Context) {
   const producerId = await getProducerId();
   if (!producerId) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   const { id } = await context.params;
-  return deleteEvent(producerId, id)
+  return (await deleteEvent(producerId, id))
     ? NextResponse.json({ ok: true })
     : NextResponse.json({ error: '일정을 찾을 수 없습니다.' }, { status: 404 });
 }

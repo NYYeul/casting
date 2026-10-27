@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { db, createRole, getRoleById, type NewRole } from './db';
 import { hashPassword } from './password';
+import { transaction } from './sql';
 import type { ActorProfile, Filmography, Gender } from './profile';
 import type { UserRole } from './session-token';
 
@@ -123,8 +124,8 @@ function profileFromRow(row: Row): ActorProfileFull {
   };
 }
 
-export function getUserById(id: string) {
-  const row = db().prepare('SELECT * FROM users WHERE id=?').get(id);
+export async function getUserById(id: string) {
+  const row = await db().prepare('SELECT * FROM users WHERE id=?').get(id);
   return row ? userFromRow(row as Row) : null;
 }
 
@@ -144,15 +145,15 @@ export type ProducerIntro = {
   memberSince: string;
 };
 
-export function getProducerIntro(ownerId: string): ProducerIntro | null {
-  const user = getUserById(ownerId);
+export async function getProducerIntro(ownerId: string): Promise<ProducerIntro | null> {
+  const user = await getUserById(ownerId);
   if (!user || user.role !== 'producer') return null;
-  const row = db()
+  const row = (await db()
     .prepare(
       `SELECT COUNT(*) total, SUM(CASE WHEN is_closed=0 THEN 1 ELSE 0 END) open
        FROM roles WHERE owner_id=?`,
     )
-    .get(ownerId) as { total: number; open: number | null } | undefined;
+    .get(ownerId)) as { total: number; open: number | null } | undefined;
   return {
     name: user.name,
     orgType: user.orgType,
@@ -163,13 +164,13 @@ export function getProducerIntro(ownerId: string): ProducerIntro | null {
   };
 }
 
-export function getUserWithHash(email: string) {
-  const row = db().prepare('SELECT * FROM users WHERE email=?').get(email.toLowerCase()) as
+export async function getUserWithHash(email: string) {
+  const row = (await db().prepare('SELECT * FROM users WHERE email=?').get(email.toLowerCase())) as
     Row | undefined;
   return row ? { user: userFromRow(row), passwordHash: String(row.password_hash) } : null;
 }
 
-export function createUser(input: {
+export async function createUser(input: {
   email: string;
   password: string;
   role: UserRole;
@@ -180,7 +181,7 @@ export function createUser(input: {
 }) {
   const id = randomUUID();
   const now = new Date().toISOString();
-  db()
+  await db()
     .prepare(
       `INSERT INTO users (id,email,password_hash,role,name,phone,org_type,org_name,created_at)
       VALUES (?,?,?,?,?,?,?,?,?)`,
@@ -197,37 +198,36 @@ export function createUser(input: {
       now,
     );
   if (input.role === 'actor')
-    db().prepare('INSERT INTO actor_profiles (user_id,updated_at) VALUES (?,?)').run(id, now);
-  return getUserById(id)!;
+    await db().prepare('INSERT INTO actor_profiles (user_id,updated_at) VALUES (?,?)').run(id, now);
+  return (await getUserById(id))!;
 }
 
 const PROFILE_SELECT = `SELECT p.*, u.name FROM actor_profiles p JOIN users u ON u.id=p.user_id`;
 
-export function getProfile(userId: string): ActorProfile | null {
-  const row = db().prepare(`${PROFILE_SELECT} WHERE p.user_id=?`).get(userId);
+export async function getProfile(userId: string): Promise<ActorProfile | null> {
+  const row = await db().prepare(`${PROFILE_SELECT} WHERE p.user_id=?`).get(userId);
   return row ? profileFromRow(row as Row) : null;
 }
 
-export function getProfileFull(userId: string): ActorProfileFull | null {
-  const row = db().prepare(`${PROFILE_SELECT} WHERE p.user_id=?`).get(userId);
+export async function getProfileFull(userId: string): Promise<ActorProfileFull | null> {
+  const row = await db().prepare(`${PROFILE_SELECT} WHERE p.user_id=?`).get(userId);
   return row ? profileFromRow(row as Row) : null;
 }
 
-export function listPublicProfiles(): ActorProfileFull[] {
-  return db()
-    .prepare(`${PROFILE_SELECT} WHERE p.is_public=1 ORDER BY p.updated_at DESC`)
-    .all()
-    .map((row) => profileFromRow(row as Row));
+export async function listPublicProfiles(): Promise<ActorProfileFull[]> {
+  return (
+    await db().prepare(`${PROFILE_SELECT} WHERE p.is_public=1 ORDER BY p.updated_at DESC`).all()
+  ).map((row) => profileFromRow(row as Row));
 }
 
-export function updateProfile(
+export async function updateProfile(
   userId: string,
   input: Omit<ActorProfileFull, 'userId' | 'updatedAt'>,
 ) {
   const documents = input.documents
     .filter((doc) => safeDocumentRef(doc.url))
     .slice(0, MAX_DOCUMENTS);
-  db()
+  await db()
     .prepare(
       `UPDATE actor_profiles SET gender=?,birth_year=?,height=?,weight=?,region=?,intro=?,tags=?,skills=?,
       photos=?,video_url=?,filmography=?,unavailable_dates=?,is_public=?,agency=?,documents=?,updated_at=? WHERE user_id=?`,
@@ -251,25 +251,25 @@ export function updateProfile(
       new Date().toISOString(),
       userId,
     );
-  if (input.name) db().prepare('UPDATE users SET name=? WHERE id=?').run(input.name, userId);
-  return getProfileFull(userId)!;
+  if (input.name) await db().prepare('UPDATE users SET name=? WHERE id=?').run(input.name, userId);
+  return (await getProfileFull(userId))!;
 }
 
-export function listFavoriteIds(producerId: string) {
+export async function listFavoriteIds(producerId: string) {
   return (
-    db().prepare('SELECT actor_id FROM favorites WHERE producer_id=?').all(producerId) as {
+    (await db().prepare('SELECT actor_id FROM favorites WHERE producer_id=?').all(producerId)) as {
       actor_id: string;
     }[]
   ).map((row) => row.actor_id);
 }
 
-export function setFavorite(producerId: string, actorId: string, on: boolean) {
+export async function setFavorite(producerId: string, actorId: string, on: boolean) {
   if (on)
-    db()
+    await db()
       .prepare('INSERT OR IGNORE INTO favorites (producer_id,actor_id,created_at) VALUES (?,?,?)')
       .run(producerId, actorId, new Date().toISOString());
   else
-    db()
+    await db()
       .prepare('DELETE FROM favorites WHERE producer_id=? AND actor_id=?')
       .run(producerId, actorId);
 }
@@ -288,19 +288,20 @@ function projectFromRow(row: Row): Project {
   };
 }
 
-export function listProjects(ownerId: string) {
-  return db()
-    .prepare('SELECT * FROM projects WHERE owner_id=? ORDER BY created_at DESC')
-    .all(ownerId)
-    .map((row) => projectFromRow(row as Row));
+export async function listProjects(ownerId: string) {
+  return (
+    await db()
+      .prepare('SELECT * FROM projects WHERE owner_id=? ORDER BY created_at DESC')
+      .all(ownerId)
+  ).map((row) => projectFromRow(row as Row));
 }
 
-function insertProject(
+async function insertProject(
   ownerId: string,
   input: Omit<Project, 'id' | 'ownerId' | 'createdAt'>,
-): Project {
+): Promise<Project> {
   const id = randomUUID();
-  db()
+  await db()
     .prepare(
       `INSERT INTO projects (id,owner_id,title,genre,shoot_start,shoot_end,location,description,created_at)
       VALUES (?,?,?,?,?,?,?,?,?)`,
@@ -316,16 +317,16 @@ function insertProject(
       input.description,
       new Date().toISOString(),
     );
-  return projectFromRow(db().prepare('SELECT * FROM projects WHERE id=?').get(id) as Row);
+  return projectFromRow((await db().prepare('SELECT * FROM projects WHERE id=?').get(id)) as Row);
 }
 
-export function findOrCreateProject(ownerId: string, role: NewRole) {
-  const row = db()
+export async function findOrCreateProject(ownerId: string, role: NewRole) {
+  const row = await db()
     .prepare('SELECT * FROM projects WHERE owner_id=? AND title=?')
     .get(ownerId, role.projectTitle);
   return row
     ? projectFromRow(row as Row)
-    : insertProject(ownerId, {
+    : await insertProject(ownerId, {
         title: role.projectTitle,
         genre: '',
         shootStart: role.shootDate,
@@ -335,24 +336,20 @@ export function findOrCreateProject(ownerId: string, role: NewRole) {
       });
 }
 
-export function createProjectWithRoles(
+export async function createProjectWithRoles(
   ownerId: string,
   project: Omit<Project, 'id' | 'ownerId' | 'createdAt'>,
   roles: Omit<NewRole, 'projectTitle'>[],
 ) {
-  const conn = db();
-  conn.exec('BEGIN');
-  try {
-    const created = insertProject(ownerId, project);
-    const createdRoles = roles.map((role) =>
-      createRole({ ...role, projectTitle: project.title }, ownerId, created.id),
-    );
-    conn.exec('COMMIT');
+  return transaction(async () => {
+    const created = await insertProject(ownerId, project);
+    const createdRoles = [];
+    for (const role of roles)
+      createdRoles.push(
+        await createRole({ ...role, projectTitle: project.title }, ownerId, created.id),
+      );
     return { project: created, roles: createdRoles };
-  } catch (error) {
-    conn.exec('ROLLBACK');
-    throw error;
-  }
+  });
 }
 
 const PROPOSAL_SELECT = `SELECT pr.*, pu.name producer_name, pu.org_name, au.name actor_name,
@@ -380,50 +377,56 @@ function proposalFromRow(row: Row): Proposal {
   };
 }
 
-export function createProposal(
+export async function createProposal(
   producerId: string,
   actorId: string,
   roleId: string,
   message: string,
 ) {
-  const role = getRoleById(roleId);
+  const role = await getRoleById(roleId);
   if (!role || role.ownerId !== producerId) return { error: '배역을 찾을 수 없습니다.' } as const;
-  const actor = getUserById(actorId);
+  const actor = await getUserById(actorId);
   if (!actor || actor.role !== 'actor') return { error: '배우를 찾을 수 없습니다.' } as const;
-  const existing = db()
+  const existing = await db()
     .prepare('SELECT id FROM proposals WHERE actor_id=? AND role_id=?')
     .get(actorId, roleId);
   if (existing) return { error: '이미 이 배역으로 제안을 보냈습니다.' } as const;
   const id = randomUUID();
-  db()
+  await db()
     .prepare(
       'INSERT INTO proposals (id,producer_id,actor_id,role_id,message,created_at) VALUES (?,?,?,?,?,?)',
     )
     .run(id, producerId, actorId, roleId, message, new Date().toISOString());
-  return { proposal: getProposal(id)! } as const;
+  return { proposal: (await getProposal(id))! } as const;
 }
 
-export function getProposal(id: string) {
-  const row = db().prepare(`${PROPOSAL_SELECT} WHERE pr.id=?`).get(id);
+export async function getProposal(id: string) {
+  const row = await db().prepare(`${PROPOSAL_SELECT} WHERE pr.id=?`).get(id);
   return row ? proposalFromRow(row as Row) : null;
 }
 
-export function listActorProposals(actorId: string) {
-  return db()
-    .prepare(`${PROPOSAL_SELECT} WHERE pr.actor_id=? ORDER BY pr.created_at DESC`)
-    .all(actorId)
-    .map((row) => proposalFromRow(row as Row));
+export async function listActorProposals(actorId: string) {
+  return (
+    await db()
+      .prepare(`${PROPOSAL_SELECT} WHERE pr.actor_id=? ORDER BY pr.created_at DESC`)
+      .all(actorId)
+  ).map((row) => proposalFromRow(row as Row));
 }
 
-export function listProducerProposals(producerId: string, actorId: string) {
-  return db()
-    .prepare(`${PROPOSAL_SELECT} WHERE pr.producer_id=? AND pr.actor_id=?`)
-    .all(producerId, actorId)
-    .map((row) => proposalFromRow(row as Row));
+export async function listProducerProposals(producerId: string, actorId: string) {
+  return (
+    await db()
+      .prepare(`${PROPOSAL_SELECT} WHERE pr.producer_id=? AND pr.actor_id=?`)
+      .all(producerId, actorId)
+  ).map((row) => proposalFromRow(row as Row));
 }
 
-export function setProposalStatus(id: string, actorId: string, status: 'accepted' | 'declined') {
-  const result = db()
+export async function setProposalStatus(
+  id: string,
+  actorId: string,
+  status: 'accepted' | 'declined',
+) {
+  const result = await db()
     .prepare("UPDATE proposals SET status=? WHERE id=? AND actor_id=? AND status='sent'")
     .run(status, id, actorId);
   return result.changes > 0;

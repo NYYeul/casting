@@ -22,14 +22,14 @@ function projectFromRow(row: Row): Project {
   };
 }
 
-function getProjectRow(id: string) {
-  return db().prepare('SELECT * FROM projects WHERE id=?').get(id) as Row | undefined;
+async function getProjectRow(id: string) {
+  return (await db().prepare('SELECT * FROM projects WHERE id=?').get(id)) as Row | undefined;
 }
 
 export async function GET() {
   const producerId = await getProducerId();
   if (!producerId) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  return NextResponse.json({ projects: listProjects(producerId) });
+  return NextResponse.json({ projects: await listProjects(producerId) });
 }
 
 export async function POST(request: NextRequest) {
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     .slice(0, 20);
   if (roles.length === 0)
     return NextResponse.json({ error: '배역을 하나 이상 추가해 주세요.' }, { status: 400 });
-  const created = createProjectWithRoles(
+  const created = await createProjectWithRoles(
     producerId,
     { ...project, shootEnd: project.shootEnd || project.shootStart },
     roles.map((role: { title: string; description: string; requirement: string }) => ({
@@ -97,7 +97,7 @@ export async function PATCH(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const id = requiredText(body.id, 60);
   if (!id) return NextResponse.json({ error: '프로젝트 id가 필요합니다.' }, { status: 400 });
-  const row = getProjectRow(id);
+  const row = await getProjectRow(id);
   if (!row) return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다.' }, { status: 404 });
   if (String(row.owner_id) !== producerId)
     return NextResponse.json({ error: '프로젝트를 수정할 권한이 없습니다.' }, { status: 403 });
@@ -137,7 +137,7 @@ export async function PATCH(request: NextRequest) {
   if (shootEnd && shootEnd < shootStart)
     return NextResponse.json({ error: '촬영 종료일을 확인해 주세요.' }, { status: 400 });
 
-  db()
+  await db()
     .prepare(
       `UPDATE projects SET title=?,genre=?,shoot_start=?,shoot_end=?,location=?,description=?
       WHERE id=?`,
@@ -151,5 +151,5 @@ export async function PATCH(request: NextRequest) {
       patch.description ?? String(row.description),
       id,
     );
-  return NextResponse.json({ project: projectFromRow(getProjectRow(id)!) });
+  return NextResponse.json({ project: projectFromRow((await getProjectRow(id))!) });
 }

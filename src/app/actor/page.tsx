@@ -15,7 +15,7 @@ function shortDate(date: string) {
 
 export default async function ActorHome() {
   if (await getActorId()) redirect('/me');
-  const roles = listOpenRoles(new Date().toISOString().slice(0, 10));
+  const roles = await listOpenRoles(new Date().toISOString().slice(0, 10));
   return (
     <main className="app-shell narrow">
       <header className="home-header">

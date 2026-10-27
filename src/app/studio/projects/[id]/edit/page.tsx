@@ -13,7 +13,7 @@ export default async function EditProjectPage({ params }: Context) {
   if (!user) redirect('/login?next=/studio');
   if (user.role !== 'producer') redirect('/me');
   const { id } = await params;
-  const row = db().prepare('SELECT * FROM projects WHERE id=?').get(id) as
+  const row = (await db().prepare('SELECT * FROM projects WHERE id=?').get(id)) as
     Record<string, unknown> | undefined;
   if (!row) notFound();
   if (String(row.owner_id) !== user.id) {

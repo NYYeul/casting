@@ -23,9 +23,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '필수 약관에 동의해 주세요.' }, { status: 400 });
   if (role === 'producer' && !requiredText(body.orgType, 40))
     return NextResponse.json({ error: '소속 유형을 선택해 주세요.' }, { status: 400 });
-  if (getUserWithHash(email))
+  if (await getUserWithHash(email))
     return NextResponse.json({ error: '이미 가입된 이메일입니다.' }, { status: 409 });
-  const user = createUser({
+  const user = await createUser({
     email,
     password,
     role,
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
   });
   await startSession({ userId: user.id, role: user.role });
   // 가입 전에 같은 이메일로 낸 지원서가 있으면 새 계정에 붙인다
-  if (role === 'actor') claimApplications(user.id, email);
+  if (role === 'actor') await claimApplications(user.id, email);
   return NextResponse.json(
     { ok: true, next: role === 'actor' ? '/me/profile' : homeFor(role) },
     { status: 201 },

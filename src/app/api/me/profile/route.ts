@@ -29,7 +29,7 @@ function intIn(value: unknown, min: number, max: number) {
 export async function GET() {
   const actorId = await getActorId();
   if (!actorId) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  return NextResponse.json({ profile: getProfileFull(actorId) });
+  return NextResponse.json({ profile: await getProfileFull(actorId) });
 }
 
 export async function PUT(request: NextRequest) {
@@ -61,7 +61,7 @@ export async function PUT(request: NextRequest) {
     .slice(0, MAX_DOCUMENTS);
   const name = requiredText(body.name, 60);
   if (!name) return NextResponse.json({ error: '이름을 입력해 주세요.' }, { status: 400 });
-  const profile = updateProfile(actorId, {
+  const profile = await updateProfile(actorId, {
     name,
     gender,
     birthYear: intIn(body.birthYear, 1930, new Date().getFullYear()),

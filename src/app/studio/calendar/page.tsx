@@ -14,14 +14,14 @@ export default async function CalendarPage() {
   const month = today.slice(0, 7);
   const [year, m] = month.split('-').map(Number);
   const days: Record<string, CalendarEvent[]> = {};
-  for (const day of listMonthEvents(session.userId, year, m)) days[day.date] = day.events;
+  for (const day of await listMonthEvents(session.userId, year, m)) days[day.date] = day.events;
   return (
     <CalendarClient
       initialMonth={month}
       initialWeeks={buildMonthGrid(year, m)}
       initialDays={days}
       today={today}
-      projects={listProjects(session.userId).map((project) => ({
+      projects={(await listProjects(session.userId)).map((project) => ({
         id: project.id,
         title: project.title,
       }))}

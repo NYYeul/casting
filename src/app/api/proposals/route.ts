@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   const message = requiredText(body.message, 1000);
   if (!message)
     return NextResponse.json({ error: '제안 메시지를 입력해 주세요.' }, { status: 400 });
-  const result = createProposal(
+  const result = await createProposal(
     producerId,
     requiredText(body.actorId, 60),
     requiredText(body.roleId, 60),

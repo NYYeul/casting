@@ -17,7 +17,7 @@ type Candidate = {
   gender: string;
 };
 
-function fromApplication(application: Application): Candidate {
+async function fromApplication(application: Application): Promise<Candidate> {
   const meta = [
     reviewLabels[application.status] ?? application.status,
     application.shortlist ? '후보' : '',
@@ -26,7 +26,7 @@ function fromApplication(application: Application): Candidate {
     .filter(Boolean)
     .join(' · ');
   // 지원서 자체에는 성별이 없다. 계정에 연결된 지원자만 프로필에서 가져온다.
-  const profile = application.actorId ? getProfile(application.actorId) : null;
+  const profile = application.actorId ? await getProfile(application.actorId) : null;
   return {
     id: application.id,
     name: application.name,
@@ -62,9 +62,9 @@ export async function GET(request: NextRequest) {
   if (source === 'role' || source === 'passed' || source === 'final') {
     const roleId = request.nextUrl.searchParams.get('roleId') || '';
     if (!roleId) return NextResponse.json({ error: '배역을 선택해 주세요.' }, { status: 400 });
-    if (!roleOwnedBy(roleId, producerId))
+    if (!(await roleOwnedBy(roleId, producerId)))
       return NextResponse.json({ error: '배역을 찾을 수 없습니다.' }, { status: 404 });
-    const applications = listApplications(roleId).filter(
+    const applications = (await listApplications(roleId)).filter(
       (application) => !['excluded', 'rejected'].includes(application.status),
     );
     const picked =
@@ -75,14 +75,16 @@ export async function GET(request: NextRequest) {
               (application) => application.status === 'interested' && !application.shortlist,
             )
           : applications;
-    candidates = picked.map(fromApplication);
+    candidates = await Promise.all(picked.map(fromApplication));
   } else if (source === 'favorites') {
-    candidates = listFavoriteIds(producerId)
-      .map((actorId) => getProfile(actorId))
+    const profiles = await Promise.all(
+      (await listFavoriteIds(producerId)).map((actorId) => getProfile(actorId)),
+    );
+    candidates = profiles
       .filter((profile): profile is ActorProfile => Boolean(profile))
       .map(fromProfile);
   } else if (source === 'actors') {
-    candidates = listPublicProfiles().map(fromProfile);
+    candidates = (await listPublicProfiles()).map(fromProfile);
   } else {
     return NextResponse.json({ error: '지원하지 않는 후보 소스입니다.' }, { status: 400 });
   }

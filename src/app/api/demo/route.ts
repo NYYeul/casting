@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   if (role !== 'producer' && role !== 'actor') {
     return NextResponse.json({ error: '체험할 역할을 선택해 주세요.' }, { status: 400 });
   }
-  const account = getUserWithHash(
+  const account = await getUserWithHash(
     role === 'producer' ? 'producer@demo.casting' : 'actor01@demo.casting',
   );
   if (!account) {

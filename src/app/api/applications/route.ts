@@ -21,15 +21,16 @@ export async function GET(request: NextRequest) {
   const producerId = await getProducerId();
   if (!producerId) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   const roleId = request.nextUrl.searchParams.get('roleId') || '';
-  if (!roleId) return NextResponse.json({ applications: listRecentApplications(producerId, 12) });
-  if (!roleOwnedBy(roleId, producerId))
+  if (!roleId)
+    return NextResponse.json({ applications: await listRecentApplications(producerId, 12) });
+  if (!(await roleOwnedBy(roleId, producerId)))
     return NextResponse.json({ error: '배역을 찾을 수 없습니다.' }, { status: 404 });
-  return NextResponse.json({ applications: listApplications(roleId) });
+  return NextResponse.json({ applications: await listApplications(roleId) });
 }
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
-  const role = getRole(requiredText(body.roleSlug, 100));
+  const role = await getRole(requiredText(body.roleSlug, 100));
   if (!role) return NextResponse.json({ error: '배역을 찾을 수 없습니다.' }, { status: 404 });
   if (role.isClosed || (role.deadline && role.deadline < new Date().toISOString().slice(0, 10))) {
     return NextResponse.json({ error: '지원이 마감된 배역입니다.' }, { status: 409 });
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
   }
   const actorId = await getActorId();
   try {
-    const application = createApplication(
+    const application = await createApplication(
       role.id,
       {
         name,
@@ -87,9 +88,9 @@ export async function POST(request: NextRequest) {
     );
     const proposalId = requiredText(body.proposalId, 60);
     if (actorId && proposalId) {
-      const proposal = getProposal(proposalId);
+      const proposal = await getProposal(proposalId);
       if (proposal && proposal.actorId === actorId && proposal.roleId === role.id)
-        setProposalStatus(proposalId, actorId, 'accepted');
+        await setProposalStatus(proposalId, actorId, 'accepted');
     }
     return NextResponse.json({ receiptToken: application.receiptToken }, { status: 201 });
   } catch (error) {
@@ -104,8 +105,8 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
-  const role = getRole(requiredText(body.roleSlug, 100));
+  const role = await getRole(requiredText(body.roleSlug, 100));
   if (!role) return NextResponse.json({ error: '배역을 찾을 수 없습니다.' }, { status: 404 });
-  recordEvent(role.id, null, 'application_started');
+  await recordEvent(role.id, null, 'application_started');
   return NextResponse.json({ ok: true });
 }

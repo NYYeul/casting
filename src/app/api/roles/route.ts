@@ -7,7 +7,7 @@ import { requiredText } from '@/lib/validation';
 export async function GET() {
   const producerId = await getProducerId();
   if (!producerId) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  return NextResponse.json({ roles: listRoles(producerId) });
+  return NextResponse.json({ roles: await listRoles(producerId) });
 }
 
 export async function POST(request: NextRequest) {
@@ -39,6 +39,9 @@ export async function POST(request: NextRequest) {
   ) {
     return NextResponse.json({ error: '필수 배역 정보를 입력해 주세요.' }, { status: 400 });
   }
-  const project = findOrCreateProject(producerId, input);
-  return NextResponse.json({ role: createRole(input, producerId, project.id) }, { status: 201 });
+  const project = await findOrCreateProject(producerId, input);
+  return NextResponse.json(
+    { role: await createRole(input, producerId, project.id) },
+    { status: 201 },
+  );
 }

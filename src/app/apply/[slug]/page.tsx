@@ -16,13 +16,13 @@ export default async function ApplyPage({
 }) {
   const { slug } = await params;
   const { proposal } = await searchParams;
-  const role = getRole(slug);
+  const role = await getRole(slug);
   if (!role) notFound();
   const actorId = await getActorId();
   let prefill: Prefill | null = null;
   if (actorId) {
-    const user = getUserById(actorId);
-    const profile = getProfile(actorId);
+    const user = await getUserById(actorId);
+    const profile = await getProfile(actorId);
     if (user && profile)
       prefill = {
         name: profile.name,
@@ -47,7 +47,7 @@ export default async function ApplyPage({
     <ApplyForm
       role={role}
       prefill={prefill}
-      producer={role.ownerId ? getProducerIntro(role.ownerId) : null}
+      producer={role.ownerId ? await getProducerIntro(role.ownerId) : null}
       proposalId={actorId && proposal && /^[\w-]{8,60}$/.test(proposal) ? proposal : ''}
     />
   );

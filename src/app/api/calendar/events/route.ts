@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       { error: '유형은 in-person(대면) 또는 remote(비대면)이어야 합니다.' },
       { status: 400 },
     );
-  const result = createEvent(producerId, {
+  const result = await createEvent(producerId, {
     title,
     actorName,
     startsAt,
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     meetingType: meetingType as 'in-person' | 'remote' | '',
   });
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 });
-  const conflict = findTimeConflict(producerId, result.event.startsAt, result.event.id);
+  const conflict = await findTimeConflict(producerId, result.event.startsAt, result.event.id);
   return NextResponse.json(conflict ? { event: result.event, conflict } : { event: result.event }, {
     status: 201,
   });

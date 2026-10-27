@@ -9,7 +9,7 @@ export default async function ProfilePage() {
   const user = await getCurrentUser();
   if (!user) redirect('/login?next=/me/profile');
   if (user.role !== 'actor') redirect('/studio');
-  const profile = getProfileFull(user.id);
+  const profile = await getProfileFull(user.id);
   if (!profile) redirect('/me');
   return <ProfileEditor initial={profile} />;
 }

@@ -15,12 +15,12 @@ export function hasSetup() {
 export async function getSession(): Promise<Session | null> {
   const token = (await cookies()).get(COOKIE)?.value;
   const session = token ? readSessionToken(token, secret()) : null;
-  return session && getUserById(session.userId) ? session : null;
+  return session && (await getUserById(session.userId)) ? session : null;
 }
 
 export async function getCurrentUser() {
   const session = await getSession();
-  return session ? getUserById(session.userId) : null;
+  return session ? await getUserById(session.userId) : null;
 }
 
 export async function getProducerId() {

@@ -9,16 +9,16 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const projectId = requiredText(body.projectId, 60);
   const email = requiredText(body.email, 254).toLowerCase();
-  if (!projectExists(projectId))
+  if (!(await projectExists(projectId)))
     return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다.' }, { status: 404 });
-  if (!isBoardOwner(projectId, userId))
+  if (!(await isBoardOwner(projectId, userId)))
     return NextResponse.json(
       { error: '프로젝트 소유자만 팀원을 초대할 수 있습니다.' },
       { status: 403 },
     );
   if (!validEmail(email))
     return NextResponse.json({ error: '가입된 제작자 이메일이 아닙니다.' }, { status: 404 });
-  const user = addMember(projectId, email);
+  const user = await addMember(projectId, email);
   if (!user)
     return NextResponse.json({ error: '가입된 제작자 이메일이 아닙니다.' }, { status: 404 });
   return NextResponse.json(

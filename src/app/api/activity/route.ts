@@ -10,7 +10,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
   const feed =
     user.role === 'producer'
-      ? producerFeed(user.id)
-      : actorFeed(user.id, user.role === 'actor' ? getProfile(user.id) : null);
+      ? await producerFeed(user.id)
+      : await actorFeed(user.id, user.role === 'actor' ? await getProfile(user.id) : null);
   return NextResponse.json(feed);
 }

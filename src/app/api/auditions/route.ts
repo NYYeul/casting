@@ -10,7 +10,7 @@ export async function GET() {
   const producerId = await getProducerId();
   if (!producerId) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   return NextResponse.json(
-    { auditions: listUpcomingAuditions(producerId, nowKst()) },
+    { auditions: await listUpcomingAuditions(producerId, nowKst()) },
     { headers: { 'Cache-Control': 'private, no-store' } },
   );
 }

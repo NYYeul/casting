@@ -1,25 +1,64 @@
-import { DatabaseSync } from 'node:sqlite';
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
-import { dataDirectory } from './data-directory';
-import { join } from 'node:path';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { hashPassword } from './password';
 import type { Application, Audition, ChatMessage, PublicStage, ReviewStatus, Role } from './types';
 import { demoFace } from './demo-faces';
+import { conn as rawConnection, withAdvisoryLock, type Conn, type Statement } from './sql';
 
-let database: DatabaseSync | undefined;
+// 스키마 생성과 샘플 데이터는 프로세스당 한 번만, 다른 인스턴스와 겹치지 않게 실행한다.
+const SCHEMA_LOCK = 7313002;
+let ready: Promise<void> | undefined;
+// 초기화(스키마·시드) 도중의 쿼리는 초기화가 끝나기를 기다리면 교착되므로 곧바로 실행한다.
+const initializing = new AsyncLocalStorage<true>();
 
-function db() {
-  if (database) return database;
-  const directory = dataDirectory();
-  const path = join(directory, 'casting.sqlite');
-  mkdirSync(directory, { recursive: true });
-  if (process.env.DEMO_MODE === 'true' && process.env.DEMO_BUILD !== 'true' && !existsSync(path)) {
-    copyFileSync(join(process.cwd(), '.demo', 'casting.sqlite'), path);
+async function setup() {
+  try {
+    await initializing.run(true, () =>
+      withAdvisoryLock(SCHEMA_LOCK, () => initialize(rawConnection)),
+    );
+  } catch (error) {
+    ready = undefined;
+    throw error;
   }
-  database = new DatabaseSync(path);
-  database.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
-  database.exec(`
+}
+
+function ensureReady() {
+  ready ??= setup();
+  return ready;
+}
+
+type GuardedStatement = Pick<Statement, 'get' | 'all' | 'run'>;
+
+// 첫 쿼리 전에 스키마가 준비되도록 모든 호출이 ensureReady를 기다린다.
+const guarded: Conn = {
+  prepare(sql: string) {
+    const statement = rawConnection.prepare(sql);
+    const wrap = <K extends keyof GuardedStatement>(method: K): GuardedStatement[K] =>
+      (async (...params: unknown[]) => {
+        if (!initializing.getStore()) await ensureReady();
+        return (statement[method] as (...args: unknown[]) => unknown)(...params);
+      }) as GuardedStatement[K];
+    return { get: wrap('get'), all: wrap('all'), run: wrap('run') } as Statement;
+  },
+  async exec(sql: string) {
+    if (!initializing.getStore()) await ensureReady();
+    return await rawConnection.exec(sql);
+  },
+};
+
+function db(): Conn {
+  return guarded;
+}
+
+async function initialize(database: Conn) {
+  const migrated = await database
+    .prepare(
+      `SELECT 1 FROM information_schema.columns
+       WHERE table_schema = current_schema() AND table_name='audition_events' AND column_name='meeting_type'`,
+    )
+    .get();
+  if (!migrated) {
+    await database.exec(`
     CREATE TABLE IF NOT EXISTS roles (
       id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, project_title TEXT NOT NULL,
       title TEXT NOT NULL, description TEXT NOT NULL, shoot_date TEXT NOT NULL,
@@ -140,39 +179,39 @@ function db() {
     CREATE INDEX IF NOT EXISTS board_moves_app ON board_moves(application_id, created_at);
     CREATE INDEX IF NOT EXISTS board_moves_cand ON board_moves(candidate_id, created_at);
   `);
-  addColumn(database, 'applications', 'chat_open', 'INTEGER NOT NULL DEFAULT 0');
-  addColumn(database, 'applications', 'actor_id', 'TEXT');
-  // 배우가 공고마다 다른 사진으로 지원할 수 있게 고른 사진 전부를 담는다.
-  // photo_url은 그중 대표 사진이고, 예전 지원서와의 호환을 위해 그대로 둔다.
-  addColumn(database, 'applications', 'photo_urls', "TEXT NOT NULL DEFAULT '[]'");
-  addColumn(database, 'roles', 'owner_id', 'TEXT');
-  addColumn(database, 'roles', 'project_id', 'TEXT');
-  addColumn(database, 'actor_profiles', 'agency', "TEXT NOT NULL DEFAULT ''");
-  addColumn(database, 'actor_profiles', 'documents', "TEXT NOT NULL DEFAULT '[]'");
-  addColumn(database, 'audition_events', 'place', "TEXT NOT NULL DEFAULT ''");
-  addColumn(database, 'audition_events', 'meeting_type', "TEXT NOT NULL DEFAULT ''");
+    await addColumn(database, 'applications', 'chat_open', 'INTEGER NOT NULL DEFAULT 0');
+    await addColumn(database, 'applications', 'actor_id', 'TEXT');
+    // 배우가 공고마다 다른 사진으로 지원할 수 있게 고른 사진 전부를 담는다.
+    // photo_url은 그중 대표 사진이고, 예전 지원서와의 호환을 위해 그대로 둔다.
+    await addColumn(database, 'applications', 'photo_urls', "TEXT NOT NULL DEFAULT '[]'");
+    await addColumn(database, 'roles', 'owner_id', 'TEXT');
+    await addColumn(database, 'roles', 'project_id', 'TEXT');
+    await addColumn(database, 'actor_profiles', 'agency', "TEXT NOT NULL DEFAULT ''");
+    await addColumn(database, 'actor_profiles', 'documents', "TEXT NOT NULL DEFAULT '[]'");
+    await addColumn(database, 'audition_events', 'place', "TEXT NOT NULL DEFAULT ''");
+    await addColumn(database, 'audition_events', 'meeting_type', "TEXT NOT NULL DEFAULT ''");
+  }
   if (
     (process.env.NODE_ENV !== 'production' || process.env.DEMO_BUILD === 'true') &&
     process.env.SEED_DEMO !== 'false'
   ) {
-    seedDemo(database);
-    seedAccounts(database);
-    seedTeams(database);
-    seedDemoActivity(database);
+    await seedDemo(database);
+    await seedAccounts(database);
+    await seedTeams(database);
+    await seedDemoActivity(database);
   }
-  return database;
 }
 
 // 데모가 "살아있는" 느낌이 들도록 최근 시각 기준의 활동 데이터를 보장한다.
 // 모든 항목은 고유 키/본문 존재 여부로 중복 삽입을 막아 재시작해도 한 번만 들어간다.
-function seedDemoActivity(connection: DatabaseSync) {
-  const producer = connection
+async function seedDemoActivity(connection: Conn) {
+  const producer = (await connection
     .prepare("SELECT id FROM users WHERE email='producer@demo.casting'")
-    .get() as { id: string } | undefined;
+    .get()) as { id: string } | undefined;
   if (!producer) return;
-  const ownedRoles = connection
+  const ownedRoles = (await connection
     .prepare('SELECT id, title FROM roles WHERE owner_id=? ORDER BY created_at DESC LIMIT 3')
-    .all(producer.id) as { id: string; title: string }[];
+    .all(producer.id)) as { id: string; title: string }[];
   if (!ownedRoles.length) return;
   const ago = (minutes: number) => new Date(Date.now() - minutes * 60000).toISOString();
   const ahead = (days: number) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
@@ -217,7 +256,7 @@ function seedDemoActivity(connection: DatabaseSync) {
   );
   for (const item of freshApps) {
     const at = ago(item.minutes);
-    insertApp.run(
+    await insertApp.run(
       randomUUID(),
       item.roleId,
       null,
@@ -239,15 +278,15 @@ function seedDemoActivity(connection: DatabaseSync) {
   }
 
   // 읽지 않은 배우 메시지 (제작자 벨 배지)
-  const thread = connection
+  const thread = (await connection
     .prepare(
       `SELECT a.id FROM applications a JOIN roles r ON r.id = a.role_id
        WHERE r.owner_id = ? ORDER BY a.created_at LIMIT 1`,
     )
-    .get(producer.id) as { id: string } | undefined;
+    .get(producer.id)) as { id: string } | undefined;
   if (thread) {
     const marker = '지원서를 검토해 주셔서 감사합니다';
-    const exists = connection
+    const exists = await connection
       .prepare('SELECT 1 FROM chat_messages WHERE application_id=? AND body LIKE ?')
       .get(thread.id, `%${marker}%`);
     if (!exists) {
@@ -255,7 +294,7 @@ function seedDemoActivity(connection: DatabaseSync) {
         `INSERT INTO chat_messages (id,application_id,sender,kind,body,slots,place,preparation,created_at)
         VALUES (?,?,?,?,?,?,?,?,?)`,
       );
-      insertMsg.run(
+      await insertMsg.run(
         randomUUID(),
         thread.id,
         'actor',
@@ -266,7 +305,7 @@ function seedDemoActivity(connection: DatabaseSync) {
         '',
         ago(40),
       );
-      insertMsg.run(
+      await insertMsg.run(
         randomUUID(),
         thread.id,
         'actor',
@@ -285,12 +324,12 @@ function seedDemoActivity(connection: DatabaseSync) {
     `INSERT OR IGNORE INTO proposals (id,producer_id,actor_id,role_id,message,status,created_at)
     VALUES (?,?,?,?,?,?,?)`,
   );
-  const actorByEmail = (email: string) =>
-    connection.prepare('SELECT id FROM users WHERE email=?').get(email) as
+  const actorByEmail = async (email: string) =>
+    (await connection.prepare('SELECT id FROM users WHERE email=?').get(email)) as
       { id: string } | undefined;
-  const actor01 = actorByEmail('actor01@demo.casting');
+  const actor01 = await actorByEmail('actor01@demo.casting');
   if (actor01 && ownedRoles[0])
-    insertProposal.run(
+    await insertProposal.run(
       randomUUID(),
       producer.id,
       actor01.id,
@@ -299,9 +338,9 @@ function seedDemoActivity(connection: DatabaseSync) {
       'sent',
       ago(95),
     );
-  const actor02 = actorByEmail('actor02@demo.casting');
+  const actor02 = await actorByEmail('actor02@demo.casting');
   if (actor02 && ownedRoles[1])
-    insertProposal.run(
+    await insertProposal.run(
       randomUUID(),
       producer.id,
       actor02.id,
@@ -346,10 +385,10 @@ function seedDemoActivity(connection: DatabaseSync) {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   );
   for (const item of freshRoles) {
-    const existing = connection.prepare('SELECT 1 FROM roles WHERE slug=?').get(item.slug);
+    const existing = await connection.prepare('SELECT 1 FROM roles WHERE slug=?').get(item.slug);
     if (existing) continue;
     const projectId = randomUUID();
-    insertProject.run(
+    await insertProject.run(
       projectId,
       producer.id,
       item.projectTitle,
@@ -359,7 +398,7 @@ function seedDemoActivity(connection: DatabaseSync) {
       item.location,
       ago(60),
     );
-    insertRole.run(
+    await insertRole.run(
       randomUUID(),
       item.slug,
       producer.id,
@@ -379,13 +418,11 @@ function seedDemoActivity(connection: DatabaseSync) {
   }
 }
 
-function addColumn(connection: DatabaseSync, table: string, column: string, definition: string) {
-  const columns = connection.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-  if (!columns.some((item) => item.name === column))
-    connection.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+async function addColumn(connection: Conn, table: string, column: string, definition: string) {
+  await connection.exec(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ${definition}`);
 }
 
-export { db };
+export { db, ensureReady };
 
 function roleFromRow(row: Record<string, unknown>): Role {
   return {
@@ -485,26 +522,28 @@ const ROLE_STATS = `SELECT roles.*, COUNT(applications.id) application_count,
       FROM roles
     LEFT JOIN applications ON applications.role_id=roles.id`;
 
-export function listRoles(ownerId: string) {
-  return db()
-    .prepare(
-      `${ROLE_STATS} WHERE roles.owner_id=? GROUP BY roles.id ORDER BY roles.created_at DESC`,
-    )
-    .all(ownerId)
-    .map((row) => roleFromRow(row as Record<string, unknown>));
+export async function listRoles(ownerId: string) {
+  return (
+    await db()
+      .prepare(
+        `${ROLE_STATS} WHERE roles.owner_id=? GROUP BY roles.id ORDER BY roles.created_at DESC`,
+      )
+      .all(ownerId)
+  ).map((row) => roleFromRow(row as Record<string, unknown>));
 }
 
-export function listOpenRoles(today: string) {
-  return db()
-    .prepare(
-      `${ROLE_STATS} WHERE roles.is_closed=0 AND roles.deadline>=? GROUP BY roles.id ORDER BY roles.created_at DESC`,
-    )
-    .all(today)
-    .map((row) => roleFromRow(row as Record<string, unknown>));
+export async function listOpenRoles(today: string) {
+  return (
+    await db()
+      .prepare(
+        `${ROLE_STATS} WHERE roles.is_closed=0 AND roles.deadline>=? GROUP BY roles.id ORDER BY roles.created_at DESC`,
+      )
+      .all(today)
+  ).map((row) => roleFromRow(row as Record<string, unknown>));
 }
 
-export function getRole(slug: string) {
-  const row = db()
+export async function getRole(slug: string) {
+  const row = await db()
     .prepare(
       `SELECT roles.*, COUNT(applications.id) application_count,
       SUM(CASE WHEN applications.status='new' THEN 1 ELSE 0 END) new_count,
@@ -516,8 +555,8 @@ export function getRole(slug: string) {
   return row ? roleFromRow(row as Record<string, unknown>) : null;
 }
 
-export function getRoleById(id: string) {
-  const row = db().prepare('SELECT * FROM roles WHERE id=?').get(id);
+export async function getRoleById(id: string) {
+  const row = await db().prepare('SELECT * FROM roles WHERE id=?').get(id);
   return row ? roleFromRow(row as Record<string, unknown>) : null;
 }
 
@@ -535,11 +574,11 @@ export type NewRole = Pick<
   | 'requirement'
 >;
 
-export function createRole(input: NewRole, ownerId: string | null, projectId: string | null) {
+export async function createRole(input: NewRole, ownerId: string | null, projectId: string | null) {
   const id = randomUUID();
   const slug = randomBytes(8).toString('hex');
   const now = new Date().toISOString();
-  db()
+  await db()
     .prepare(
       `INSERT INTO roles (id,slug,owner_id,project_id,project_title,title,description,shoot_date,location,pay,deadline,contact_name,announcement_date,requirement,created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -561,14 +600,14 @@ export function createRole(input: NewRole, ownerId: string | null, projectId: st
       input.requirement,
       now,
     );
-  recordEvent(id, null, 'role_published');
-  return getRole(slug)!;
+  await recordEvent(id, null, 'role_published');
+  return (await getRole(slug))!;
 }
 
-export function updateRole(id: string, input: Partial<Role>) {
-  const current = getRoleById(id);
+export async function updateRole(id: string, input: Partial<Role>) {
+  const current = await getRoleById(id);
   if (!current) return null;
-  db()
+  await db()
     .prepare(
       `UPDATE roles SET project_title=?,title=?,description=?,shoot_date=?,location=?,pay=?,deadline=?,contact_name=?,announcement_date=?,requirement=?,is_closed=? WHERE id=?`,
     )
@@ -586,39 +625,42 @@ export function updateRole(id: string, input: Partial<Role>) {
       Number(input.isClosed ?? current.isClosed),
       id,
     );
-  return getRole(current.slug);
+  return await getRole(current.slug);
 }
 
-export function listApplications(roleId: string) {
-  return db()
-    .prepare(
-      `SELECT applications.*, ${CHAT_SUMMARY} FROM applications WHERE role_id=? ORDER BY created_at DESC`,
-    )
-    .all(roleId)
-    .map((row) => appFromRow(row as Record<string, unknown>));
+export async function listApplications(roleId: string) {
+  return (
+    await db()
+      .prepare(
+        `SELECT applications.*, ${CHAT_SUMMARY} FROM applications WHERE role_id=? ORDER BY created_at DESC`,
+      )
+      .all(roleId)
+  ).map((row) => appFromRow(row as Record<string, unknown>));
 }
 
-export function listRecentApplications(ownerId: string, limit = 8) {
-  return db()
-    .prepare(
-      `SELECT applications.*, roles.title role_title, roles.project_title, ${CHAT_SUMMARY}
+export async function listRecentApplications(ownerId: string, limit = 8) {
+  return (
+    await db()
+      .prepare(
+        `SELECT applications.*, roles.title role_title, roles.project_title, ${CHAT_SUMMARY}
       FROM applications JOIN roles ON roles.id=applications.role_id
       WHERE roles.owner_id=?
       ORDER BY applications.created_at DESC LIMIT ?`,
-    )
-    .all(ownerId, limit)
-    .map((row) => appFromRow(row as Record<string, unknown>));
+      )
+      .all(ownerId, limit)
+  ).map((row) => appFromRow(row as Record<string, unknown>));
 }
 
-export function listActorApplications(actorId: string) {
-  return db()
-    .prepare(
-      `SELECT applications.*, roles.title role_title, roles.project_title
+export async function listActorApplications(actorId: string) {
+  return (
+    await db()
+      .prepare(
+        `SELECT applications.*, roles.title role_title, roles.project_title
       FROM applications JOIN roles ON roles.id=applications.role_id
       WHERE applications.actor_id=? ORDER BY applications.created_at DESC`,
-    )
-    .all(actorId)
-    .map((row) => appFromRow(row as Record<string, unknown>));
+      )
+      .all(actorId)
+  ).map((row) => appFromRow(row as Record<string, unknown>));
 }
 
 /**
@@ -630,22 +672,22 @@ export function listActorApplications(actorId: string) {
  * 방금 이 이메일로 비밀번호 인증을 통과한 사람만 호출한다 (로그인·가입 직후).
  * 이미 주인이 있는 지원서(actor_id가 찬 것)는 건드리지 않는다.
  */
-export function claimApplications(actorId: string, email: string) {
-  const result = db()
+export async function claimApplications(actorId: string, email: string) {
+  const result = await db()
     .prepare('UPDATE applications SET actor_id=? WHERE actor_id IS NULL AND email=?')
     .run(actorId, email.toLowerCase());
   return Number(result.changes);
 }
 
-export function roleOwnedBy(roleId: string, ownerId: string) {
+export async function roleOwnedBy(roleId: string, ownerId: string) {
   return Boolean(
-    db().prepare('SELECT 1 FROM roles WHERE id=? AND owner_id=?').get(roleId, ownerId),
+    await db().prepare('SELECT 1 FROM roles WHERE id=? AND owner_id=?').get(roleId, ownerId),
   );
 }
 
-export function applicationOwnedBy(applicationId: string, ownerId: string) {
+export async function applicationOwnedBy(applicationId: string, ownerId: string) {
   return Boolean(
-    db()
+    await db()
       .prepare(
         'SELECT 1 FROM applications a JOIN roles r ON r.id=a.role_id WHERE a.id=? AND r.owner_id=?',
       )
@@ -653,37 +695,38 @@ export function applicationOwnedBy(applicationId: string, ownerId: string) {
   );
 }
 
-export function listUpcomingAuditions(ownerId: string, now: string): Audition[] {
-  return db()
-    .prepare(
-      `SELECT m.selected_slot slot, m.place, a.id application_id, a.name, a.photo_url,
+export async function listUpcomingAuditions(ownerId: string, now: string): Promise<Audition[]> {
+  return (
+    await db()
+      .prepare(
+        `SELECT m.selected_slot slot, m.place, a.id application_id, a.name, a.photo_url,
       r.id role_id, r.title role_title, r.project_title
       FROM chat_messages m
       JOIN applications a ON a.id=m.application_id
       JOIN roles r ON r.id=a.role_id
       WHERE r.owner_id=? AND m.kind='offer' AND m.status='confirmed' AND m.selected_slot >= ?
       ORDER BY m.selected_slot ASC`,
-    )
-    .all(ownerId, now)
-    .map((row) => ({
-      applicationId: String((row as Record<string, unknown>).application_id),
-      roleId: String((row as Record<string, unknown>).role_id),
-      name: String((row as Record<string, unknown>).name),
-      photoUrl: String((row as Record<string, unknown>).photo_url),
-      roleTitle: String((row as Record<string, unknown>).role_title),
-      projectTitle: String((row as Record<string, unknown>).project_title),
-      slot: String((row as Record<string, unknown>).slot),
-      place: String((row as Record<string, unknown>).place),
-    }));
+      )
+      .all(ownerId, now)
+  ).map((row) => ({
+    applicationId: String((row as Record<string, unknown>).application_id),
+    roleId: String((row as Record<string, unknown>).role_id),
+    name: String((row as Record<string, unknown>).name),
+    photoUrl: String((row as Record<string, unknown>).photo_url),
+    roleTitle: String((row as Record<string, unknown>).role_title),
+    projectTitle: String((row as Record<string, unknown>).project_title),
+    slot: String((row as Record<string, unknown>).slot),
+    place: String((row as Record<string, unknown>).place),
+  }));
 }
 
-export function getApplication(id: string) {
-  const row = db().prepare('SELECT * FROM applications WHERE id=?').get(id);
+export async function getApplication(id: string) {
+  const row = await db().prepare('SELECT * FROM applications WHERE id=?').get(id);
   return row ? appFromRow(row as Record<string, unknown>) : null;
 }
 
-export function getApplicationByReceipt(token: string) {
-  const row = db().prepare('SELECT * FROM applications WHERE receipt_token=?').get(token);
+export async function getApplicationByReceipt(token: string) {
+  const row = await db().prepare('SELECT * FROM applications WHERE receipt_token=?').get(token);
   return row ? appFromRow(row as Record<string, unknown>) : null;
 }
 
@@ -703,7 +746,7 @@ export type NewApplication = Pick<
   | 'skill'
 >;
 
-export function createApplication(
+export async function createApplication(
   roleId: string,
   input: NewApplication,
   actorId: string | null = null,
@@ -711,7 +754,7 @@ export function createApplication(
   const id = randomUUID();
   const receipt = randomBytes(24).toString('hex');
   const now = new Date().toISOString();
-  db()
+  await db()
     .prepare(
       `INSERT INTO applications (id,role_id,actor_id,name,age,email,phone,introduction,photo_url,photo_urls,video_url,available,travel,pay_accepted,skill,receipt_token,created_at,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -736,18 +779,18 @@ export function createApplication(
       now,
       now,
     );
-  recordEvent(roleId, id, 'application_submitted');
-  return getApplication(id)!;
+  await recordEvent(roleId, id, 'application_submitted');
+  return (await getApplication(id))!;
 }
 
-export function reviewApplication(
+export async function reviewApplication(
   id: string,
   input: { status?: ReviewStatus; note?: string; shortlist?: boolean; publicStage?: PublicStage },
 ) {
-  const current = getApplication(id);
+  const current = await getApplication(id);
   if (!current) return null;
   const now = new Date().toISOString();
-  db()
+  await db()
     .prepare(
       'UPDATE applications SET status=?,note=?,shortlist=?,public_stage=?,updated_at=? WHERE id=?',
     )
@@ -760,16 +803,16 @@ export function reviewApplication(
       id,
     );
   if (input.status && input.status !== current.status)
-    recordEvent(current.roleId, id, 'review_status_changed');
+    await recordEvent(current.roleId, id, 'review_status_changed');
   if (input.shortlist !== undefined && input.shortlist !== current.shortlist)
-    recordEvent(current.roleId, id, 'shortlist_changed');
+    await recordEvent(current.roleId, id, 'shortlist_changed');
   if (input.publicStage && input.publicStage !== current.publicStage)
-    recordEvent(current.roleId, id, 'public_result_confirmed');
-  return getApplication(id)!;
+    await recordEvent(current.roleId, id, 'public_result_confirmed');
+  return (await getApplication(id))!;
 }
 
-export function recordEvent(roleId: string, applicationId: string | null, name: string) {
-  db()
+export async function recordEvent(roleId: string, applicationId: string | null, name: string) {
+  await db()
     .prepare('INSERT INTO events (id,role_id,application_id,name,created_at) VALUES (?,?,?,?,?)')
     .run(randomUUID(), roleId, applicationId, name, new Date().toISOString());
 }
@@ -790,8 +833,8 @@ function messageFromRow(row: Record<string, unknown>): ChatMessage {
   };
 }
 
-export function getLatestOffer(applicationId: string) {
-  const row = db()
+export async function getLatestOffer(applicationId: string) {
+  const row = await db()
     .prepare(
       "SELECT * FROM chat_messages WHERE application_id=? AND kind='offer' ORDER BY created_at DESC LIMIT 1",
     )
@@ -799,26 +842,27 @@ export function getLatestOffer(applicationId: string) {
   return row ? messageFromRow(row as Record<string, unknown>) : null;
 }
 
-export function listChatMessages(applicationId: string) {
-  return db()
-    .prepare('SELECT * FROM chat_messages WHERE application_id=? ORDER BY created_at ASC')
-    .all(applicationId)
-    .map((row) => messageFromRow(row as Record<string, unknown>));
+export async function listChatMessages(applicationId: string) {
+  return (
+    await db()
+      .prepare('SELECT * FROM chat_messages WHERE application_id=? ORDER BY created_at ASC')
+      .all(applicationId)
+  ).map((row) => messageFromRow(row as Record<string, unknown>));
 }
 
-export function getChatMessage(id: string) {
-  const row = db().prepare('SELECT * FROM chat_messages WHERE id=?').get(id);
+export async function getChatMessage(id: string) {
+  const row = await db().prepare('SELECT * FROM chat_messages WHERE id=?').get(id);
   return row ? messageFromRow(row as Record<string, unknown>) : null;
 }
 
-export function sendChatMessage(
+export async function sendChatMessage(
   applicationId: string,
   input: Pick<ChatMessage, 'sender' | 'kind' | 'body' | 'slots' | 'place' | 'preparation'>,
 ) {
-  const application = getApplication(applicationId);
+  const application = await getApplication(applicationId);
   if (!application) return null;
   const id = randomUUID();
-  db()
+  await db()
     .prepare(
       `INSERT INTO chat_messages (id,application_id,sender,kind,body,slots,place,preparation,created_at)
     VALUES (?,?,?,?,?,?,?,?,?)`,
@@ -835,40 +879,44 @@ export function sendChatMessage(
       new Date().toISOString(),
     );
   if (input.sender === 'producer')
-    db().prepare('UPDATE applications SET chat_open=1 WHERE id=?').run(applicationId);
-  recordEvent(
+    await db().prepare('UPDATE applications SET chat_open=1 WHERE id=?').run(applicationId);
+  await recordEvent(
     application.roleId,
     applicationId,
     input.kind === 'offer' ? 'audition_offer_sent' : 'chat_message_sent',
   );
-  return getChatMessage(id)!;
+  return (await getChatMessage(id))!;
 }
 
-export function respondToOffer(
+export async function respondToOffer(
   messageId: string,
   action: 'select' | 'decline' | 'request_change' | 'confirm',
   selectedSlot = '',
 ) {
-  const message = getChatMessage(messageId);
+  const message = await getChatMessage(messageId);
   if (!message || message.kind !== 'offer') return null;
   if (action === 'select' && message.status === 'sent' && message.slots.includes(selectedSlot)) {
-    db()
+    await db()
       .prepare("UPDATE chat_messages SET status='selected',selected_slot=? WHERE id=?")
       .run(selectedSlot, messageId);
   } else if (action === 'decline' && message.status === 'sent') {
-    db().prepare("UPDATE chat_messages SET status='declined' WHERE id=?").run(messageId);
+    await db().prepare("UPDATE chat_messages SET status='declined' WHERE id=?").run(messageId);
   } else if (action === 'request_change' && message.status === 'sent') {
-    db().prepare("UPDATE chat_messages SET status='change_requested' WHERE id=?").run(messageId);
+    await db()
+      .prepare("UPDATE chat_messages SET status='change_requested' WHERE id=?")
+      .run(messageId);
   } else if (action === 'confirm' && message.status === 'selected') {
-    db().prepare("UPDATE chat_messages SET status='confirmed' WHERE id=?").run(messageId);
+    await db().prepare("UPDATE chat_messages SET status='confirmed' WHERE id=?").run(messageId);
   } else return null;
-  const application = getApplication(message.applicationId)!;
-  recordEvent(application.roleId, application.id, `audition_offer_${action}`);
-  return getChatMessage(messageId)!;
+  const application = (await getApplication(message.applicationId))!;
+  await recordEvent(application.roleId, application.id, `audition_offer_${action}`);
+  return (await getChatMessage(messageId))!;
 }
 
-function seedDemo(connection: DatabaseSync) {
-  const count = connection.prepare('SELECT COUNT(*) count FROM roles').get() as { count: number };
+async function seedDemo(connection: Conn) {
+  const count = (await connection.prepare('SELECT COUNT(*) count FROM roles').get()) as {
+    count: number;
+  };
   if (count.count) return;
   const kstDateIn = (days: number) =>
     new Intl.DateTimeFormat('en-CA', {
@@ -878,7 +926,7 @@ function seedDemo(connection: DatabaseSync) {
       day: '2-digit',
     }).format(new Date(Date.now() + days * 86_400_000));
   const shootDate = kstDateIn(13);
-  const role = createRole(
+  const role = await createRole(
     {
       projectTitle: '단편영화 〈봄날〉 · 샘플',
       title: '민수 역',
@@ -904,7 +952,7 @@ function seedDemo(connection: DatabaseSync) {
     ['한지민', 24, '웹드라마 주연, 단편 1편', 'unsure', 'new', 7],
   ] as const;
   for (const [name, age, introduction, available, status, photo] of examples) {
-    const application = createApplication(role.id, {
+    const application = await createApplication(role.id, {
       name,
       age,
       email: `${randomBytes(4).toString('hex')}@example.com`,
@@ -918,18 +966,20 @@ function seedDemo(connection: DatabaseSync) {
       payAccepted: 'yes',
       skill: '자연스러운 대화 연기',
     });
-    if (status !== 'new') reviewApplication(application.id, { status });
+    if (status !== 'new') await reviewApplication(application.id, { status });
   }
 }
 
 const DEMO_PASSWORD = 'demo1234';
 
-function seedAccounts(connection: DatabaseSync) {
-  const count = connection.prepare('SELECT COUNT(*) count FROM users').get() as { count: number };
+async function seedAccounts(connection: Conn) {
+  const count = (await connection.prepare('SELECT COUNT(*) count FROM users').get()) as {
+    count: number;
+  };
   if (count.count) return;
   const now = new Date().toISOString();
   const producerId = randomUUID();
-  connection
+  await connection
     .prepare(
       `INSERT INTO users (id,email,password_hash,role,name,phone,org_type,org_name,created_at)
       VALUES (?,?,?,?,?,?,?,?,?)`,
@@ -945,14 +995,14 @@ function seedAccounts(connection: DatabaseSync) {
       '한빛대 영화과 졸업작품팀',
       now,
     );
-  const orphans = connection
+  const orphans = (await connection
     .prepare(
       'SELECT DISTINCT project_title, location, shoot_date FROM roles WHERE owner_id IS NULL',
     )
-    .all() as { project_title: string; location: string; shoot_date: string }[];
+    .all()) as { project_title: string; location: string; shoot_date: string }[];
   for (const orphan of orphans) {
     const projectId = randomUUID();
-    connection
+    await connection
       .prepare(
         `INSERT INTO projects (id,owner_id,title,genre,shoot_start,shoot_end,location,created_at)
         VALUES (?,?,?,?,?,?,?,?)`,
@@ -967,7 +1017,7 @@ function seedAccounts(connection: DatabaseSync) {
         orphan.location,
         now,
       );
-    connection
+    await connection
       .prepare(
         'UPDATE roles SET owner_id=?, project_id=? WHERE owner_id IS NULL AND project_title=?',
       )
@@ -1151,11 +1201,12 @@ function seedAccounts(connection: DatabaseSync) {
       '무술 유단자, 액션 단편 3편.',
     ],
   ];
-  actors.forEach(
-    ([name, gender, birthYear, height, region, tags, skills, photos, intro], index) => {
+  for (const [index, actor] of actors.entries()) {
+    const [name, gender, birthYear, height, region, tags, skills, photos, intro] = actor;
+    {
       const userId = randomUUID();
       const number = String(index + 1).padStart(2, '0');
-      connection
+      await connection
         .prepare(
           `INSERT INTO users (id,email,password_hash,role,name,phone,created_at) VALUES (?,?,?,?,?,?,?)`,
         )
@@ -1168,7 +1219,7 @@ function seedAccounts(connection: DatabaseSync) {
           '010-0000-0000',
           now,
         );
-      connection
+      await connection
         .prepare(
           `INSERT INTO actor_profiles (user_id,gender,birth_year,height,weight,region,intro,tags,skills,photos,video_url,filmography,unavailable_dates,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -1200,33 +1251,33 @@ function seedAccounts(connection: DatabaseSync) {
           JSON.stringify(index % 4 === 0 ? ['2026-10-26'] : []),
           now,
         );
-    },
-  );
+    }
+  }
 }
 
-function seedTeams(connection: DatabaseSync) {
-  const seeded = connection.prepare('SELECT COUNT(*) count FROM team_members').get() as {
+async function seedTeams(connection: Conn) {
+  const seeded = (await connection.prepare('SELECT COUNT(*) count FROM team_members').get()) as {
     count: number;
   };
   if (seeded.count) return;
-  const producer = connection
+  const producer = (await connection
     .prepare("SELECT id FROM users WHERE email='producer@demo.casting'")
-    .get() as { id: string } | undefined;
+    .get()) as { id: string } | undefined;
   if (!producer) return;
   const producerId = producer.id;
   const now = new Date().toISOString();
-  const ownedProjects = connection
+  const ownedProjects = (await connection
     .prepare('SELECT id, title FROM projects WHERE owner_id=?')
-    .all(producerId) as { id: string; title: string }[];
+    .all(producerId)) as { id: string; title: string }[];
   for (const project of ownedProjects) {
-    connection
+    await connection
       .prepare(
         'INSERT OR IGNORE INTO team_members (project_id,user_id,member_role,invited_at) VALUES (?,?,?,?)',
       )
       .run(project.id, producerId, 'owner', now);
   }
   const directorId = randomUUID();
-  connection
+  await connection
     .prepare(
       `INSERT OR IGNORE INTO users (id,email,password_hash,role,name,phone,org_type,org_name,created_at)
       VALUES (?,?,?,?,?,?,?,?,?)`,
@@ -1242,49 +1293,49 @@ function seedTeams(connection: DatabaseSync) {
       '김감독 스튜디오',
       now,
     );
-  const director = connection
+  const director = (await connection
     .prepare("SELECT id FROM users WHERE email='director@demo.casting'")
-    .get() as { id: string };
+    .get()) as { id: string };
   const firstProject = ownedProjects[0];
   if (firstProject) {
-    connection
+    await connection
       .prepare(
         'INSERT OR IGNORE INTO team_members (project_id,user_id,member_role,invited_at) VALUES (?,?,?,?)',
       )
       .run(firstProject.id, director.id, 'member', now);
-    const sampleApps = connection
+    const sampleApps = (await connection
       .prepare(
         `SELECT a.id FROM applications a JOIN roles r ON a.role_id=r.id
          WHERE r.project_id=? ORDER BY a.created_at LIMIT 3`,
       )
-      .all(firstProject.id) as { id: string }[];
+      .all(firstProject.id)) as { id: string }[];
     const [appA, appB, appC] = sampleApps;
     if (appA) {
-      connection
+      await connection
         .prepare(
           'INSERT OR IGNORE INTO board_votes (application_id,user_id,created_at) VALUES (?,?,?)',
         )
         .run(appA.id, producerId, now);
-      connection
+      await connection
         .prepare(
           'INSERT OR IGNORE INTO board_votes (application_id,user_id,created_at) VALUES (?,?,?)',
         )
         .run(appA.id, director.id, now);
-      connection
+      await connection
         .prepare(
           'INSERT INTO board_notes (id,application_id,user_id,body,created_at) VALUES (?,?,?,?,?)',
         )
         .run(randomUUID(), appA.id, director.id, '첫인상이 배역 이미지와 잘 맞아요.', now);
     }
     if (appB) {
-      connection
+      await connection
         .prepare(
           'INSERT OR IGNORE INTO board_votes (application_id,user_id,created_at) VALUES (?,?,?)',
         )
         .run(appB.id, producerId, now);
     }
     if (appC) {
-      connection
+      await connection
         .prepare(
           'INSERT INTO board_notes (id,application_id,user_id,body,created_at) VALUES (?,?,?,?,?)',
         )

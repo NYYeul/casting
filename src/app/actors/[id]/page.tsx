@@ -12,7 +12,7 @@ export default async function ActorPage({ params }: { params: Promise<{ id: stri
   if (!session) redirect(`/login?next=/actors/${id}`);
   const isSelf = session.role === 'actor' && session.userId === id;
   if (session.role !== 'producer' && !isSelf) notFound();
-  const profile = getProfileFull(id);
+  const profile = await getProfileFull(id);
   if (!profile || (!profile.isPublic && !isSelf)) notFound();
   const producer = session.role === 'producer';
   const today = new Date().toISOString().slice(0, 10);
@@ -20,16 +20,16 @@ export default async function ActorPage({ params }: { params: Promise<{ id: stri
     <ActorDetail
       profile={profile}
       viewer={producer ? 'producer' : 'self'}
-      favorite={producer && listFavoriteIds(session.userId).includes(id)}
+      favorite={producer && (await listFavoriteIds(session.userId)).includes(id)}
       roles={
         producer
-          ? listRoles(session.userId)
+          ? (await listRoles(session.userId))
               .filter((role) => !role.isClosed && role.deadline >= today)
               .map((role) => ({ id: role.id, label: `${role.projectTitle} · ${role.title}` }))
           : []
       }
       proposedRoleIds={
-        producer ? listProducerProposals(session.userId, id).map((p) => p.roleId) : []
+        producer ? (await listProducerProposals(session.userId, id)).map((p) => p.roleId) : []
       }
     />
   );

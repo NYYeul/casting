@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'month는 YYYY-MM 형식이어야 합니다.' }, { status: 400 });
   const [year, m] = month.split('-').map(Number);
   const days: Record<string, CalendarEvent[]> = {};
-  for (const day of listMonthEvents(producerId, year, m)) days[day.date] = day.events;
+  for (const day of await listMonthEvents(producerId, year, m)) days[day.date] = day.events;
   return NextResponse.json(
     { month, today: todayKst(), weeks: buildMonthGrid(year, m), days },
     { headers: { 'Cache-Control': 'private, no-store' } },

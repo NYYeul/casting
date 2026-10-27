@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   const producerId = await getProducerId();
   if (!producerId) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   const params = request.nextUrl.searchParams;
-  const favorites = listFavoriteIds(producerId);
+  const favorites = await listFavoriteIds(producerId);
   const filters: ActorFilters = {
     q: params.get('q') || undefined,
     gender: params.get('gender') || undefined,
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     intParam(params.get('careerMin'), 0, 100, 0),
     params.get('career') === '1' ? 1 : 0,
   );
-  const actors = listPublicProfiles()
+  const actors = (await listPublicProfiles())
     .filter(
       (profile) => matchesFilters(profile, filters) && profile.filmography.length >= careerMin,
     )

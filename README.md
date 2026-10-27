@@ -93,12 +93,12 @@ pnpm dev
 ## 🧱 기술 스택
 
 - **Next.js 16.4** (App Router, Server Components + Route Handlers) · **React 19** · **TypeScript 5.9** · **pnpm**
-- **DB**: 로컬 SQLite — Node 내장 `node:sqlite` (`data/casting.sqlite`, git 추적 안 함)
+- **DB**: Neon Postgres — `pg` 클라이언트, 비동기 접근 계층은 `src/lib/sql.ts` (스키마는 `src/lib/db.ts`가 첫 접속 때 자동 생성)
 - **인증**: 이메일 + scrypt 비밀번호 해시 + HMAC 서명 세션 쿠키 (`src/lib/auth.ts`)
 - **업로드**: 로컬 `data/uploads/` (이미지·PDF, 매직바이트 검증, 5MB)
 - **PWA**: 매니페스트·아이콘·홈 화면 설치
 
-> ⚠️ **배포 주의**: SQLite·업로드가 로컬 파일이라 Vercel 같은 서버리스는 불가 — 상주형 서버(Railway/Render/VPS) + `data/` 볼륨이 필요합니다. 실제 서비스용 권장 스택(Next.js + Supabase)은 [docs/STACK_PROPOSAL.md](docs/STACK_PROPOSAL.md) 참고.
+> 💡 **배포**: 데이터는 Neon Postgres에 저장되어 서버리스(Vercel)에서도 유지됩니다. 사진·PDF 업로드는 아직 로컬 `data/uploads/`라서, 영구 저장(Vercel Blob)으로 옮기기 전까지 Vercel에서는 재시작 시 사라집니다.
 
 ---
 
@@ -114,7 +114,7 @@ src/
     apply/[slug]/      # 공개 지원 (무가입)
     status/[token]/    # 지원자 상태·오디션 응답
   lib/
-    db.ts              # 스키마 + 쿼리 (단일 파일 SQLite 레이어)
+    db.ts              # 스키마 + 쿼리 (Postgres, 비동기)
     accounts.ts        # 사용자·프로필·프로젝트·제안
     board.ts           # 팀 보드(후보·투표·메모)
     calendar.ts        # 캘린더 이벤트 + 오퍼 병합  ← DB 의존
@@ -129,7 +129,7 @@ docs/                  # PRD 보조 문서, API 계약, 기술 설계, 협업 �
 ### ⚠️ 개발 시 주의 (Next 16 + 이 프로젝트 규칙)
 
 1. **AGENTS.md 필독** — 이 버전의 Next는 breaking change가 있습니다. 코드 작성 전 `node_modules/next/dist/docs/` 관련 가이드를 확인하세요. (`params`는 Promise로 await, `cookies()` await 등)
-2. **클라이언트에서 DB 모듈 import 금지** — `lib/db.ts`·`lib/accounts.ts`·`lib/calendar.ts`를 `'use client'` 파일에서 import하면 `node:sqlite`가 브라우저 번들에 섞여 500이 납니다. 클라이언트는 리프 모듈(`calendar-grid.ts`, `fit.ts`, `compare.ts`, `profile.ts`)의 타입/순수 함수만 import 하세요.
+2. **클라이언트에서 DB 모듈 import 금지** — `lib/db.ts`·`lib/accounts.ts`·`lib/calendar.ts`를 `'use client'` 파일에서 import하면 `pg`가 브라우저 번들에 섞여 500이 납니다. 클라이언트는 리프 모듈(`calendar-grid.ts`, `fit.ts`, `compare.ts`, `profile.ts`)의 타입/순수 함수만 import 하세요.
 3. **권한**: API는 서버에서 `getProducerId()`/`getActorId()`로 역할 검증. 제작자는 자기 프로젝트(팀원 포함)만, 배우는 자기 데이터만.
 4. **테이블 추가**: `db.ts`의 `CREATE TABLE IF NOT EXISTS` + `addColumn()` 패턴으로. 기존 DB 마이그레이션 자동.
 
@@ -174,4 +174,4 @@ pnpm format         # prettier --write
 
 ### Vercel 체험 배포
 
-`DEMO_MODE=true`와 24자 이상 무작위 `SESSION_SECRET`을 설정하면 제작자·배우 체험 버튼으로 바로 입장합니다. 빌드 시 가상 계정·배역·지원자가 담긴 SQLite 스냅샷을 만들고 각 함수의 임시 디렉터리에 복사합니다. 모든 함수가 동일한 초기 ID를 사용하므로 로그인·프로필·지원 링크가 연결됩니다. 서버가 재시작되면 변경 내용과 업로드는 초기화되며, 함수 사이에서 체험 중 변경 사항의 공유는 보장하지 않습니다. 실제 운영에는 영구 DB·파일 저장소가 필요합니다.
+Vercel Storage에서 Neon을 프로젝트에 연결하면 `DATABASE_URL`이 자동으로 들어갑니다. `DEMO_MODE=true`와 24자 이상 무작위 `SESSION_SECRET`을 설정하면 제작자·배우 체험 버튼으로 바로 입장하고, 빌드 때 `scripts/prepare-demo.ts`가 가상 계정·배역·지원자를 Neon에 채웁니다(여러 번 실행해도 중복되지 않음). 데이터는 영구 보존되므로 실제 운영 전에는 `DEMO_MODE`를 끄세요. 로컬 개발도 같은 `DATABASE_URL`을 쓰므로, 따로 쓰려면 Neon 브랜치를 만들어 그 연결 문자열을 `.env.local`에 넣으세요.

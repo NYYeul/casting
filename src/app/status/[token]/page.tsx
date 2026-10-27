@@ -48,11 +48,11 @@ function ReceiptNotFound() {
 
 export default async function StatusPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const application = getApplicationByReceipt(token);
+  const application = await getApplicationByReceipt(token);
   if (!application) return <ReceiptNotFound />;
-  const role = getRoleById(application.roleId);
+  const role = await getRoleById(application.roleId);
   if (!role) return <ReceiptNotFound />;
-  const offer = getLatestOffer(application.id);
+  const offer = await getLatestOffer(application.id);
   return (
     <main className="app-shell narrow">
       <header className="sub-header">

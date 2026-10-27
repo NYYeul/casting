@@ -101,11 +101,11 @@ function parseSlots(value: unknown): string[] {
  * 확정 외에도 지원서당 최신 오퍼가 조율 중(sent/selected)이거나 변경 요청
  * (change_requested)이면 '조율 중'·'변경 요청' 배지로 함께 표시한다 (읽기 전용).
  */
-export function listMonthEvents(
+export async function listMonthEvents(
   ownerId: string,
   year: number,
   month: number,
-): { date: string; events: CalendarEvent[] }[] {
+): Promise<{ date: string; events: CalendarEvent[] }[]> {
   const monthStart = `${year}-${pad2(month)}-01`;
   const monthEnd = month === 12 ? `${year + 1}-01-01` : `${year}-${pad2(month + 1)}-01`;
   const inRange = (date: string) => date >= monthStart && date < monthEnd;
@@ -115,7 +115,7 @@ export function listMonthEvents(
     if (list) list.push(event);
     else byDate.set(date, [event]);
   };
-  const rows = db()
+  const rows = await db()
     .prepare(
       `${EVENT_SELECT} WHERE e.owner_id=? AND e.starts_at>=? AND e.starts_at<? ORDER BY e.starts_at ASC`,
     )
@@ -125,7 +125,7 @@ export function listMonthEvents(
     push(event.startsAt.slice(0, 10), toCalendarEvent(event));
   }
   // 확정 오퍼 병합: listUpcomingAuditions는 selected_slot >= now 이므로 월초를 넘겨 월 전체를 얻는다
-  for (const offer of listUpcomingAuditions(ownerId, `${monthStart}T00:00`)) {
+  for (const offer of await listUpcomingAuditions(ownerId, `${monthStart}T00:00`)) {
     const slot = offer.slot;
     if (!SLOT_FORMAT.test(slot)) continue;
     const date = slot.slice(0, 10);
@@ -145,7 +145,7 @@ export function listMonthEvents(
     });
   }
   // 조율 중 오퍼 병합: 지원서별 '최신' 오퍼가 미확정 상태일 때만 (이전 오퍼는 새 제안으로 대체됨)
-  const pendingOffers = db()
+  const pendingOffers = await db()
     .prepare(
       `SELECT m.status, m.slots, m.selected_slot, m.place, m.application_id,
         a.name actor_name, r.title role_title, r.project_title
@@ -198,18 +198,18 @@ export function listMonthEvents(
     .map(([date, events]) => ({ date, events }));
 }
 
-function projectOwnedBy(projectId: string, ownerId: string) {
+async function projectOwnedBy(projectId: string, ownerId: string) {
   return Boolean(
-    db().prepare('SELECT 1 FROM projects WHERE id=? AND owner_id=?').get(projectId, ownerId),
+    await db().prepare('SELECT 1 FROM projects WHERE id=? AND owner_id=?').get(projectId, ownerId),
   );
 }
 
-export function getEvent(id: string, ownerId: string) {
-  const row = db().prepare(`${EVENT_SELECT} WHERE e.id=? AND e.owner_id=?`).get(id, ownerId);
+export async function getEvent(id: string, ownerId: string) {
+  const row = await db().prepare(`${EVENT_SELECT} WHERE e.id=? AND e.owner_id=?`).get(id, ownerId);
   return row ? eventFromRow(row as Row) : null;
 }
 
-export function createEvent(
+export async function createEvent(
   ownerId: string,
   input: {
     title: string;
@@ -222,10 +222,10 @@ export function createEvent(
   },
 ) {
   const projectId = input.projectId || null;
-  if (projectId && !projectOwnedBy(projectId, ownerId))
+  if (projectId && !(await projectOwnedBy(projectId, ownerId)))
     return { error: '프로젝트를 찾을 수 없습니다.' } as const;
   const id = randomUUID();
-  db()
+  await db()
     .prepare(
       `INSERT INTO audition_events
         (id,owner_id,project_id,title,actor_name,starts_at,status,note,place,meeting_type,created_at)
@@ -243,10 +243,10 @@ export function createEvent(
       input.meetingType ?? '',
       new Date().toISOString(),
     );
-  return { event: getEvent(id, ownerId)! } as const;
+  return { event: (await getEvent(id, ownerId))! } as const;
 }
 
-export function updateEvent(
+export async function updateEvent(
   ownerId: string,
   id: string,
   input: {
@@ -257,9 +257,9 @@ export function updateEvent(
     meetingType?: MeetingType | '';
   },
 ) {
-  const current = getEvent(id, ownerId);
+  const current = await getEvent(id, ownerId);
   if (!current) return null;
-  db()
+  await db()
     .prepare(
       `UPDATE audition_events SET status=?,note=?,starts_at=?,place=?,meeting_type=?
       WHERE id=? AND owner_id=?`,
@@ -273,7 +273,7 @@ export function updateEvent(
       id,
       ownerId,
     );
-  return getEvent(id, ownerId);
+  return await getEvent(id, ownerId);
 }
 
 /**
@@ -281,26 +281,26 @@ export function updateEvent(
  * 수동 일정(취소 건 제외)과 확정 오퍼 슬롯을 검사한다. 시간 없는 종일 일정은 비교 불가로 제외.
  * 생성 직후/PATCH 검증 시 자기 자신은 excludeId로 건너뛴다.
  */
-export function findTimeConflict(
+export async function findTimeConflict(
   ownerId: string,
   startsAt: string,
   excludeId = '',
-): EventConflict | null {
+): Promise<EventConflict | null> {
   const normalized = normalizeStartsAt(startsAt) || startsAt;
   if (normalized.length < 16) return null;
   const date = normalized.slice(0, 10);
-  const rows = db()
+  const rows = (await db()
     .prepare(
       `SELECT id, title, starts_at FROM audition_events
       WHERE owner_id=? AND substr(starts_at,1,10)=? AND status!='canceled'`,
     )
-    .all(ownerId, date) as Row[];
+    .all(ownerId, date)) as Row[];
   for (const row of rows) {
     if (String(row.id) === excludeId) continue;
     if (timesConflict(normalized, String(row.starts_at)))
       return { with: String(row.title), time: String(row.starts_at).slice(11, 16) };
   }
-  const offers = db()
+  const offers = (await db()
     .prepare(
       `SELECT m.selected_slot, r.title role_title
       FROM chat_messages m
@@ -309,7 +309,7 @@ export function findTimeConflict(
       WHERE r.owner_id=? AND m.kind='offer' AND m.status='confirmed'
         AND substr(m.selected_slot,1,10)=?`,
     )
-    .all(ownerId, date) as Row[];
+    .all(ownerId, date)) as Row[];
   for (const row of offers) {
     if (timesConflict(normalized, String(row.selected_slot)))
       return {
@@ -320,8 +320,8 @@ export function findTimeConflict(
   return null;
 }
 
-export function deleteEvent(ownerId: string, id: string) {
-  const result = db()
+export async function deleteEvent(ownerId: string, id: string) {
+  const result = await db()
     .prepare('DELETE FROM audition_events WHERE id=? AND owner_id=?')
     .run(id, ownerId);
   return result.changes > 0;

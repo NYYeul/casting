@@ -74,9 +74,9 @@ function sanitizeBrief(value: unknown): Brief {
   };
 }
 
-function recommend(brief: Brief, limit = 12) {
+async function recommend(brief: Brief, limit = 12) {
   const year = new Date().getFullYear();
-  return listPublicProfiles()
+  return (await listPublicProfiles())
     .map((profile: ActorProfile) => ({ profile, ...scoreActor(profile, brief, year) }))
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score || a.profile.name.localeCompare(b.profile.name, 'ko'))
@@ -102,11 +102,11 @@ export async function GET(request: NextRequest) {
   if (!producerId) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   const roleId = request.nextUrl.searchParams.get('roleId') || '';
   if (!roleId) return NextResponse.json({ error: 'roleId가 필요합니다.' }, { status: 400 });
-  if (!roleOwnedBy(roleId, producerId))
+  if (!(await roleOwnedBy(roleId, producerId)))
     return NextResponse.json({ error: '배역을 찾을 수 없습니다.' }, { status: 404 });
-  const role = getRoleById(roleId)!;
+  const role = (await getRoleById(roleId))!;
   const brief = briefFromRole(role);
-  return NextResponse.json({ brief, results: recommend(brief) }, { headers: NO_STORE });
+  return NextResponse.json({ brief, results: await recommend(brief) }, { headers: NO_STORE });
 }
 
 export async function POST(request: NextRequest) {
@@ -114,5 +114,5 @@ export async function POST(request: NextRequest) {
   if (!producerId) return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   const body = await request.json().catch(() => ({}));
   const brief = sanitizeBrief(body?.brief ?? body);
-  return NextResponse.json({ brief, results: recommend(brief) }, { headers: NO_STORE });
+  return NextResponse.json({ brief, results: await recommend(brief) }, { headers: NO_STORE });
 }
