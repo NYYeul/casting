@@ -1,4 +1,5 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap');
 
 :root {
   /* 브랜드 팔레트 */
@@ -12,14 +13,25 @@
   --primary: var(--obsidian);
   --primary-deep: #000000;
   --on-primary: #ffffff;
-  --lavender: var(--ice);
-  --lavender-strong: #d6dce8;
+  /* 아이스 화이트 페이지 위에서도 보이도록 한 단계 진한 연한 면 */
+  --lavender: #dfe4ee;
+  --lavender-strong: #cbd2df;
   --ink: var(--obsidian);
   --muted: #6b7384;
-  --faint: #a3acbb;
-  --line: #e3e8f0;
+  --faint: #848d9d;
+  --line: #dde2ec;
   --card: #ffffff;
-  --page: #f4f6fa;
+  --page: var(--ice);
+
+  /* 메탈릭 퓨처리즘: 크롬 질감은 로고·선택 테두리·랜딩에만 */
+  --metal: linear-gradient(135deg, #fbfcfe 0%, #c3cad7 26%, #eef1f6 46%, #98a2b3 70%, #e3e7ee 100%);
+  --glow-lavender: #c9c4f7;
+  --glow-sky: #bfd6ff;
+  --lime-glow: #c5ff4566;
+
+  /* 사이버 UI: 숫자·라벨용 모노 글꼴, 짧고 부드러운 전환 */
+  --mono: 'JetBrains Mono', 'Pretendard Variable', ui-monospace, monospace;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   font-family:
     'Pretendard Variable',
     'Pretendard',
@@ -27,7 +39,7 @@
     'Noto Sans KR',
     sans-serif;
   color: var(--ink);
-  background: var(--ice);
+  background: #dfe4ee;
   font-synthesis: none;
 }
 * {
@@ -2500,7 +2512,7 @@ img {
 .pnav > button {
   border: 0;
   background: none;
-  color: #a1a6b1;
+  color: var(--muted);
   font-size: 10px;
   font-weight: 600;
   display: flex;
@@ -2752,8 +2764,9 @@ img {
   font-size: 10px;
   font-weight: 700;
   color: var(--primary);
-  background: var(--lavender);
-  border-radius: 7px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
   padding: 3px 7px;
 }
 .tag-row i.plain {
@@ -4136,4 +4149,255 @@ img {
   background: var(--lavender);
   padding: 3px 9px;
   border-radius: 999px;
+}
+
+/* ══ 메탈릭 퓨처리즘 + 사이버 UI ═══════════════════════════
+   비율: 깔끔한 화면 70% · 메탈릭/사이버 디테일 20% · 캐릭터 10%.
+   광택은 브랜드 요소(로고·선택 테두리·랜딩)에만 쓰고, 작업 화면은 사진과 글이 먼저 읽히게 둔다.
+   라임은 핵심 버튼 글자와 선택 상태 신호에만. */
+
+/* 공통 움직임과 키보드 포커스 */
+.button,
+.filter,
+.pcard,
+.tile-photo,
+.heart,
+.pnav .nav-ic {
+  transition:
+    background-color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    color 0.18s var(--ease),
+    box-shadow 0.18s var(--ease),
+    transform 0.18s var(--ease);
+}
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--obsidian);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px var(--lime);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 핵심 버튼: 옵시디언 + 라임 글자, 위쪽에 얇은 금속 하이라이트 */
+.button-primary {
+  box-shadow:
+    inset 0 1px 0 #ffffff26,
+    0 8px 18px #0b0d1229;
+}
+.button-primary:hover {
+  background: #1a1f2a;
+}
+.filter.active {
+  color: var(--lime);
+}
+
+/* 숫자는 모노 글꼴로 계기판처럼 */
+.pcard-stats strong,
+.count-pill,
+.bell-btn .dot,
+.filter-btn b,
+.match-badge {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.pcard-stats span {
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+.count-pill {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+/* 상태 배지: 흰 바탕 + 얇은 선 + 라임 표시등 */
+.badge-soft,
+.role-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.badge-soft::before,
+.role-state::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--lime);
+  box-shadow:
+    0 0 0 1px var(--obsidian),
+    0 0 6px var(--lime-glow);
+}
+.badge-soft.state-off {
+  background: #f3f5f9;
+}
+.badge-soft.state-off::before {
+  background: var(--chrome);
+  box-shadow: 0 0 0 1px #8d97a8;
+}
+.chip-new {
+  color: var(--lime);
+  background: var(--obsidian);
+  border-radius: 6px;
+}
+
+/* 메탈릭 브랜드 */
+.loading-mark,
+.brand-mark {
+  background: var(--metal);
+  color: var(--obsidian);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 -1px 0 #8d97a866,
+    0 10px 24px #0b0d121f;
+}
+
+/* 선택된 카드: 크롬 테두리 */
+.sel-card {
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    var(--metal) border-box;
+  border: 1.5px solid transparent;
+}
+
+/* 하단 내비: 반투명 유리 + 옵시디언 활성 칸에 라임 아이콘 */
+.pnav {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+.pnav > .active .nav-ic {
+  background: var(--obsidian);
+  color: var(--lime);
+}
+
+/* 프로젝트 만들기 단계: 번호 + 연결선 */
+.wizard-steps b {
+  font-family: var(--mono);
+  font-size: 11px;
+  border-radius: 8px;
+}
+.wizard-steps li.done b {
+  color: var(--lime);
+}
+.wizard-steps:not(.vertical) li:not(:last-child)::after {
+  content: '';
+  flex: 1;
+  min-width: 8px;
+  height: 1px;
+  background: var(--line);
+}
+.wizard-steps:not(.vertical) li.done:not(:last-child)::after {
+  background: var(--obsidian);
+}
+
+/* 배우 탐색: 사진이 먼저, 저장한 배우만 라임 테두리 */
+.tile-photo {
+  aspect-ratio: 3 / 4;
+  border-radius: 20px;
+}
+.actor-tile:has(.heart.on) .tile-photo {
+  box-shadow:
+    0 0 0 2px var(--obsidian),
+    0 0 0 5px var(--lime);
+}
+.heart.on {
+  background: var(--obsidian);
+  color: var(--lime);
+}
+.tile-info strong {
+  font-size: 15px;
+  letter-spacing: -0.3px;
+}
+
+/* 랜딩: 연보라·하늘빛 + 유리 + 크롬 오브젝트 */
+.landing-page {
+  background:
+    radial-gradient(900px 520px at 82% -8%, #c9c4f7cc 0%, transparent 62%),
+    radial-gradient(760px 460px at -12% 40%, #bfd6ffb3 0%, transparent 60%),
+    linear-gradient(180deg, #f1f3fa 0%, var(--ice) 100%);
+}
+.lp-copy h1 em {
+  padding: 0;
+  background: linear-gradient(var(--lime), var(--lime)) 0 92% / 100% 0.16em no-repeat;
+}
+.lp-values span {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid #fff;
+  box-shadow: 0 6px 16px #8f9bd426;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.lp-collage img {
+  border: 3px solid transparent;
+  background: var(--metal) border-box;
+  box-shadow: 0 18px 40px #5c6aa833;
+}
+.lp-bubble {
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0.82),
+    rgba(214, 208, 250, 0.66) 58%,
+    rgba(191, 214, 255, 0.66)
+  );
+  color: var(--obsidian);
+  border: 1.5px solid rgba(255, 255, 255, 0.95);
+  border-radius: 22px;
+  padding: 12px 20px;
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 14px 34px #7f8ed440;
+}
+/* 크롬 고리(토러스)와 진주 구슬. 장식이라 화면 읽기 도구에는 보이지 않는다. */
+.lp-collage::before,
+.lp-collage::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+}
+.lp-collage::before {
+  width: 84px;
+  height: 84px;
+  right: -10px;
+  top: 40%;
+  z-index: 5;
+  background: conic-gradient(
+    from 210deg,
+    #fbfcff,
+    #b7bff0 18%,
+    #eef1f8 36%,
+    #8e98c6 55%,
+    #dfe4f4 74%,
+    #fbfcff
+  );
+  -webkit-mask: radial-gradient(circle, transparent 33%, #000 34%);
+  mask: radial-gradient(circle, transparent 33%, #000 34%);
+  transform: rotate(-20deg) scaleY(0.7);
+}
+.lp-collage::after {
+  width: 30px;
+  height: 30px;
+  left: 22%;
+  top: -4px;
+  z-index: 5;
+  background: radial-gradient(circle at 34% 30%, #fff 0%, #dcdff6 40%, #8f98c8 100%);
+  box-shadow: 0 8px 16px #6f7db44d;
 }
