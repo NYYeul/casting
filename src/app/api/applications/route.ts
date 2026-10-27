@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { clientIp, overLimit, TOO_MANY } from '@/lib/rate-limit';
 import { getProposal, setProposalStatus } from '@/lib/accounts';
 import { getActorId, getProducerId } from '@/lib/auth';
 import {
@@ -29,6 +30,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // 공개 지원 링크는 로그인 없이 쓸 수 있어 IP 단위로 제한한다.
+  if (await overLimit(`apply-ip:${clientIp(request.headers)}`, 20, 3600))
+    return NextResponse.json({ error: TOO_MANY }, { status: 429 });
   const body = await request.json().catch(() => ({}));
   const role = await getRole(requiredText(body.roleSlug, 100));
   if (!role) return NextResponse.json({ error: '배역을 찾을 수 없습니다.' }, { status: 404 });

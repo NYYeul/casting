@@ -54,7 +54,7 @@ async function initialize(database: Conn) {
   const migrated = await database
     .prepare(
       `SELECT 1 FROM information_schema.columns
-       WHERE table_schema = current_schema() AND table_name='audition_events' AND column_name='meeting_type'`,
+       WHERE table_schema = current_schema() AND table_name='password_resets' AND column_name='used_at'`,
     )
     .get();
   if (!migrated) {
@@ -178,6 +178,15 @@ async function initialize(database: Conn) {
     );
     CREATE INDEX IF NOT EXISTS board_moves_app ON board_moves(application_id, created_at);
     CREATE INDEX IF NOT EXISTS board_moves_cand ON board_moves(candidate_id, created_at);
+    -- 로그인·가입·재설정 요청의 시도 횟수 제한. key는 '종류:IP' 또는 '종류:이메일'.
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      key TEXT PRIMARY KEY, window_start BIGINT NOT NULL, count INTEGER NOT NULL
+    );
+    -- 비밀번호 재설정 링크. 토큰 원문은 메일로만 보내고 여기에는 해시만 둔다.
+    CREATE TABLE IF NOT EXISTS password_resets (
+      token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
+      expires_at TEXT NOT NULL, used_at TEXT, created_at TEXT NOT NULL
+    );
   `);
     await addColumn(database, 'applications', 'chat_open', 'INTEGER NOT NULL DEFAULT 0');
     await addColumn(database, 'applications', 'actor_id', 'TEXT');

@@ -11,6 +11,9 @@ export function DemoEntry({ caption = '가입 없이 데모로 둘러보기' }: 
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
 
+  // 체험용 배포(NEXT_PUBLIC_DEMO_MODE=true)에서만 보인다.
+  if (process.env.NEXT_PUBLIC_DEMO_MODE !== 'true') return null;
+
   async function enter(email: string, home: string) {
     setBusy(email);
     setError('');

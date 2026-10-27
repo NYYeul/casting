@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { db, createRole, getRoleById, type NewRole } from './db';
 import { hashPassword } from './password';
 import { transaction } from './sql';
+import { deleteUploads } from './storage';
 import type { ActorProfile, Filmography, Gender } from './profile';
 import type { UserRole } from './session-token';
 
@@ -430,4 +431,70 @@ export async function setProposalStatus(
     .prepare("UPDATE proposals SET status=? WHERE id=? AND actor_id=? AND status='sent'")
     .run(status, id, actorId);
   return result.changes > 0;
+}
+
+/**
+ * 회원 탈퇴: 계정과 그 계정에 묶인 개인정보를 모두 지운다.
+ * - 배우: 프로필, 낸 지원서(대화·투표·메모 포함), 받은 제안, 후보 등록
+ * - 제작자: 프로젝트·배역과 거기에 들어온 지원서 전체, 팀 보드 기록, 일정, 비교 결과
+ * 외래키에 CASCADE가 없어 자식 테이블부터 순서대로 지운다.
+ */
+export async function deleteAccount(userId: string) {
+  const files: string[] = [];
+  await transaction(async () => {
+    const run = (sql: string, count: number) =>
+      db()
+        .prepare(sql)
+        .run(...Array(count).fill(userId));
+    const roleIds = 'SELECT id FROM roles WHERE owner_id=?'; // 1
+    const projectIds = 'SELECT id FROM projects WHERE owner_id=?'; // 1
+    const appIds = `SELECT id FROM applications WHERE actor_id=? OR role_id IN (${roleIds})`; // 2
+    const candIds = `SELECT id FROM project_candidates
+      WHERE actor_id=? OR added_by=? OR project_id IN (${projectIds})`; // 3
+
+    const profile = (await db()
+      .prepare('SELECT photos, documents FROM actor_profiles WHERE user_id=?')
+      .get(userId)) as { photos: string; documents: string } | undefined;
+    if (profile) {
+      files.push(...(JSON.parse(profile.photos || '[]') as string[]));
+      files.push(
+        ...(JSON.parse(profile.documents || '[]') as { url: string }[]).map((doc) => doc.url),
+      );
+    }
+    const apps = (await db()
+      .prepare(`SELECT photo_url, photo_urls FROM applications WHERE id IN (${appIds})`)
+      .all(userId, userId)) as { photo_url: string; photo_urls: string }[];
+    for (const app of apps)
+      files.push(app.photo_url, ...(JSON.parse(app.photo_urls || '[]') as string[]));
+
+    await run(`DELETE FROM candidate_votes WHERE user_id=? OR candidate_id IN (${candIds})`, 4);
+    await run(`DELETE FROM candidate_notes WHERE user_id=? OR candidate_id IN (${candIds})`, 4);
+    await run(
+      `DELETE FROM board_moves WHERE user_id=? OR candidate_id IN (${candIds}) OR application_id IN (${appIds})`,
+      6,
+    );
+    await run(`DELETE FROM project_candidates WHERE id IN (${candIds})`, 3);
+    await run(`DELETE FROM board_votes WHERE user_id=? OR application_id IN (${appIds})`, 3);
+    await run(`DELETE FROM board_notes WHERE user_id=? OR application_id IN (${appIds})`, 3);
+    await run(`DELETE FROM chat_messages WHERE application_id IN (${appIds})`, 2);
+    await run(`DELETE FROM audition_events WHERE owner_id=? OR application_id IN (${appIds})`, 3);
+    await run(
+      `DELETE FROM events WHERE role_id IN (${roleIds}) OR application_id IN (${appIds})`,
+      3,
+    );
+    await run(`DELETE FROM applications WHERE id IN (${appIds})`, 2);
+    await run(
+      `DELETE FROM proposals WHERE producer_id=? OR actor_id=? OR role_id IN (${roleIds})`,
+      3,
+    );
+    await run('DELETE FROM favorites WHERE producer_id=? OR actor_id=?', 2);
+    await run('DELETE FROM compare_results WHERE owner_id=?', 1);
+    await run(`DELETE FROM team_members WHERE user_id=? OR project_id IN (${projectIds})`, 2);
+    await run('DELETE FROM roles WHERE owner_id=?', 1);
+    await run('DELETE FROM projects WHERE owner_id=?', 1);
+    await run('DELETE FROM password_resets WHERE user_id=?', 1);
+    await run('DELETE FROM actor_profiles WHERE user_id=?', 1);
+    await run('DELETE FROM users WHERE id=?', 1);
+  });
+  await deleteUploads(files.filter(Boolean));
 }

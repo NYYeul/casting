@@ -1,2 +1,5 @@
 allowBuilds:
   esbuild: true
+overrides:
+  # @vercel/blob → @vercel/oidc → @vercel/cli-config 경유 취약 버전 (GHSA-mrhx-c7xc-m3w5)
+  zod: '>=4.6.6'

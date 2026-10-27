@@ -1,3 +1,4 @@
+import { getSession } from '@/lib/auth';
 import { readUpload } from '@/lib/storage';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -12,6 +13,9 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ na
   const { name } = await context.params;
   const match = /^([a-f0-9-]{36})\.(jpg|png|webp|pdf)$/.exec(name);
   if (!match) return new NextResponse('Not found', { status: 404 });
+  // 사진은 공개 지원 화면에도 쓰이지만, PDF 자료(이력서·증명서)는 로그인한 사용자만 연다.
+  if (match[2] === 'pdf' && !(await getSession()))
+    return new NextResponse('Unauthorized', { status: 401 });
   try {
     const body = await readUpload(name);
     if (!body) return new NextResponse('Not found', { status: 404 });

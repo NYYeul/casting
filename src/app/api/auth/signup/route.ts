@@ -3,11 +3,14 @@ import { createUser, getUserWithHash } from '@/lib/accounts';
 import { hasSetup, homeFor, startSession } from '@/lib/auth';
 import { claimApplications } from '@/lib/db';
 import { passwordProblem } from '@/lib/password';
+import { clientIp, overLimit, TOO_MANY } from '@/lib/rate-limit';
 import { requiredText, validEmail } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
   if (!hasSetup())
     return NextResponse.json({ error: 'SESSION_SECRET이 설정되지 않았습니다.' }, { status: 503 });
+  if (await overLimit(`signup-ip:${clientIp(request.headers)}`, 10, 3600))
+    return NextResponse.json({ error: TOO_MANY }, { status: 429 });
   const body = await request.json().catch(() => ({}));
   const role = body.role === 'producer' ? 'producer' : body.role === 'actor' ? 'actor' : null;
   const email = requiredText(body.email, 254).toLowerCase();

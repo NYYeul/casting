@@ -1,8 +1,5 @@
 import type { NextConfig } from 'next';
 
-const nextConfig: NextConfig = {
-  serverExternalPackages: ['node:sqlite'],
-  outputFileTracingIncludes: { '/*': ['./.demo/casting.sqlite'] },
-};
+const nextConfig: NextConfig = {};
 
 export default nextConfig;

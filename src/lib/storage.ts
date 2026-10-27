@@ -2,9 +2,9 @@
 // Vercel에 Blob이 연결돼 있으면(BLOB_STORE_ID) 비공개 Blob 스토어에, 아니면 로컬 data/uploads/에 둔다.
 // 어느 쪽이든 읽기는 /api/uploads/[name] 라우트를 거치므로 URL 형태는 같다.
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { get, put } from '@vercel/blob';
+import { del, get, put } from '@vercel/blob';
 import { dataDirectory } from './data-directory';
 
 function useBlob() {
@@ -34,5 +34,22 @@ export async function readUpload(name: string): Promise<BodyInit | null> {
     return new Uint8Array(await readFile(join(dataDirectory(), 'uploads', name)));
   } catch {
     return null;
+  }
+}
+
+/** /api/uploads/<name> 형태의 URL들을 지운다. 실패해도 탈퇴 같은 본 작업은 막지 않는다. */
+export async function deleteUploads(urls: string[]) {
+  const names = urls
+    .map((url) => /^\/api\/uploads\/([a-f0-9-]{36}\.(?:jpg|png|webp|pdf))$/.exec(url)?.[1])
+    .filter((name): name is string => Boolean(name));
+  if (!names.length) return;
+  try {
+    if (useBlob()) await del(names.map((name) => `uploads/${name}`));
+    else
+      await Promise.all(
+        names.map((name) => rm(join(dataDirectory(), 'uploads', name), { force: true })),
+      );
+  } catch (error) {
+    console.error('업로드 파일 삭제 실패', error);
   }
 }
