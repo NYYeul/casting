@@ -1,7 +1,7 @@
 // 알림 피드 — 실제 DB 이벤트(지원·메시지·제안 응답·공고)를 모아 최근순으로 반환.
 // 별도 notifications 테이블 없이 파생 데이터로 구성해 항상 실제 상태와 일치한다.
 import { db } from './db';
-import { matchRoleForActor, type MatchProfileInput } from './match';
+import { matchNotice, matchRoleForActor, type MatchProfileInput } from './match';
 
 export type ActivityItem = {
   id: string;
@@ -114,7 +114,7 @@ export async function producerFeed(ownerId: string): Promise<ActivityFeed> {
 
 export async function actorFeed(
   actorId: string,
-  profile: MatchProfileInput | null,
+  profile: (MatchProfileInput & { name?: string }) | null,
 ): Promise<ActivityFeed> {
   const items: ActivityItem[] = [];
   let badge = 0;
@@ -191,24 +191,24 @@ export async function actorFeed(
       )
       .all(since)) as Row[];
     const matched = roles
-      .map((row) => ({
-        row,
-        fit: matchRoleForActor(profile, {
+      .map((row) => {
+        const role = {
           title: str(row.title),
           description: str(row.description),
           requirement: str(row.requirement),
           location: str(row.location),
           shootDate: str(row.shoot_date),
-        }),
-      }))
+        };
+        return { row, role, fit: matchRoleForActor(profile, role) };
+      })
       .filter((entry) => entry.fit.score >= 25)
       .sort((a, b) => b.fit.score - a.fit.score)
       .slice(0, 3);
-    for (const { row, fit } of matched) {
+    for (const { row, role, fit } of matched) {
       items.push({
         id: `role-${str(row.slug)}`,
         icon: '🎯',
-        text: `내 프로필과 ${fit.score}% 맞는 새 공고 ‘${str(row.title)}’`,
+        text: `${matchNotice(profile.name ?? '', profile, role, fit.reasons)} — ‘${str(row.project_title)} ${role.title}’`,
         href: `/apply/${str(row.slug)}`,
         at: str(row.created_at),
       });

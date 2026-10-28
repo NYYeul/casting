@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   applyPick,
   buildBracket,
+  canDefer,
   champion,
   createState,
   currentMatch,
+  deferMatch,
   progress,
   roundProgress,
 } from '../src/lib/compare.ts';
@@ -107,4 +109,43 @@ test('잘못된 픽과 후보 수는 오류를 던진다', () => {
   assert.throws(() => applyPick(state, 9, 0, 'a'));
   assert.throws(() => buildBracket(['a', 'b', 'c']));
   assert.throws(() => buildBracket(ids8.concat('i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q')));
+});
+
+test('보류한 대결은 같은 라운드 맨 뒤로 미뤄졌다가 다시 나온다', () => {
+  const state = createState(ids8, 4);
+  const first = currentMatch(state);
+  assert.equal(first.pairIndex, 0);
+  assert.ok(canDefer(state));
+  let next = deferMatch(state, first.roundIndex, first.pairIndex);
+  assert.equal(state.deferred, undefined); // 원본 불변
+  assert.equal(currentMatch(next).pairIndex, 1);
+  // 나머지 3경기를 고르면 보류했던 0번 경기가 다시 나온다
+  for (let i = 0; i < 3; i += 1) {
+    const cur = currentMatch(next);
+    assert.notEqual(cur.pairIndex, 0);
+    next = applyPick(next, cur.roundIndex, cur.pairIndex, cur.pair.a);
+  }
+  const back = currentMatch(next);
+  assert.deepEqual([back.roundIndex, back.pairIndex], [0, 0]);
+  assert.equal(canDefer(next), false); // 라운드에 이 경기만 남으면 보류 불가
+  next = applyPick(next, 0, 0, back.pair.b);
+  assert.deepEqual(next.deferred, []);
+  assert.equal(currentMatch(next).roundIndex, 1);
+});
+
+test('여러 번 보류하면 미룬 순서대로 돌아오고, 끝까지 우승자가 나온다', () => {
+  let state = createState(ids8, 8);
+  state = deferMatch(state, 0, 0);
+  state = deferMatch(state, 0, 1);
+  state = deferMatch(state, 0, 0); // 다시 보류하면 또 맨 뒤로
+  assert.deepEqual(state.deferred, ['0:1', '0:0']);
+  const order = [];
+  while (!champion(state)) {
+    const cur = currentMatch(state);
+    if (cur.roundIndex === 0) order.push(cur.pairIndex);
+    state = applyPick(state, cur.roundIndex, cur.pairIndex, cur.pair.a);
+  }
+  assert.deepEqual(order, [2, 3, 1, 0]);
+  assert.equal(progress(state).percent, 100);
+  assert.throws(() => deferMatch(state, 0, 0)); // 이미 끝난 경기
 });

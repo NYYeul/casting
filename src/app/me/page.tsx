@@ -5,7 +5,7 @@ import ActorNav from '@/components/actor-nav';
 import { NotifBell } from '@/components/notif-bell';
 import RecentStrip from '@/components/recent-strip';
 import { RECENT_ROLES } from '@/lib/recent';
-import { getProfile, listActorProposals } from '@/lib/accounts';
+import { getProducerOrgLines, getProfile, listActorProposals } from '@/lib/accounts';
 import { getCurrentUser } from '@/lib/auth';
 import { listActorApplications, listOpenRoles } from '@/lib/db';
 import { matchRoleForActor } from '@/lib/match';
@@ -32,6 +32,7 @@ export default async function ActorHome() {
   const applications = await listActorApplications(user.id);
   const appliedRoleIds = new Set(applications.map((item) => item.roleId));
   const roles = await listOpenRoles(new Date().toISOString().slice(0, 10));
+  const orgLines = await getProducerOrgLines(roles.map((role) => role.ownerId));
   const matched = profile
     ? roles
         .map((role) => ({ role, fit: matchRoleForActor(profile, role) }))
@@ -117,7 +118,14 @@ export default async function ActorHome() {
           </span>
         </div>
         {applications.length === 0 ? (
-          <div className="empty-card">아직 지원한 배역이 없습니다.</div>
+          <div className="empty-card">
+            아직 지원한 배역이 없습니다.
+            <br />
+            아래 공고에서 첫 지원을 시작해 보세요.
+            <a href="#open-roles" className="button button-soft empty-cta">
+              모집 중인 배역 보기
+            </a>
+          </div>
         ) : (
           applications.map((item) => (
             <Link key={item.id} href={`/status/${item.receiptToken}`} className="audition-card">
@@ -140,7 +148,7 @@ export default async function ActorHome() {
         {matched.length > 0 && (
           <>
             <div className="section-head">
-              <h2>나와 잘 맞는 공고</h2>
+              <h2>{user.name}배우님을 위한 맞춤 공고</h2>
               <span className="muted" style={{ fontSize: 12 }}>
                 프로필 기반 추천
               </span>
@@ -152,9 +160,11 @@ export default async function ActorHome() {
                   href={`/apply/${role.slug}`}
                   className="pcard role-link match-card"
                 >
-                  <span className="match-badge">{fit.score}% 매치</span>
                   <h3>{role.projectTitle}</h3>
                   <p className="sub">{role.title}</p>
+                  {role.ownerId && orgLines.get(role.ownerId) && (
+                    <p className="org-line">{orgLines.get(role.ownerId)}</p>
+                  )}
                   <p className="meta">
                     촬영 {formatDates(role.shootDates, 1) || shortDate(role.shootDate)} ·{' '}
                     {role.location}
@@ -172,7 +182,7 @@ export default async function ActorHome() {
           </>
         )}
 
-        <div className="section-head">
+        <div className="section-head" id="open-roles">
           <h2>모집 중인 배역</h2>
           <span className="muted" style={{ fontSize: 12 }}>
             {roles.length}개
@@ -192,6 +202,9 @@ export default async function ActorHome() {
                   </span>
                   <h3>{role.projectTitle}</h3>
                   <p className="sub">{role.title}</p>
+                  {role.ownerId && orgLines.get(role.ownerId) && (
+                    <p className="org-line">{orgLines.get(role.ownerId)}</p>
+                  )}
                   <p className="meta">
                     촬영 {formatDates(role.shootDates, 1) || shortDate(role.shootDate)} ·{' '}
                     {role.location}

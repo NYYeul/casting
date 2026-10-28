@@ -403,3 +403,9 @@
     max-height: 420px;
   }
 }
+/* 결정하기 어려운 대결을 뒤로 미루는 '보류' 버튼 */
+.deferButton {
+  display: block;
+  margin: 0 auto;
+  font-size: 13px;
+}

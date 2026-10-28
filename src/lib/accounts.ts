@@ -243,6 +243,27 @@ export async function getProducerIntro(ownerId: string): Promise<ProducerIntro |
   };
 }
 
+/**
+ * 공고 카드에 한 줄로 붙이는 제작자 소속 (예: "한빛대 영화과 졸업작품팀").
+ * 소속명이 없으면 소속 유형을, 둘 다 없으면 빼고 돌려준다. 키는 제작자 id.
+ */
+export async function getProducerOrgLines(ownerIds: (string | null | undefined)[]) {
+  const ids = [...new Set(ownerIds.filter((id): id is string => Boolean(id)))];
+  const lines = new Map<string, string>();
+  if (!ids.length) return lines;
+  const rows = (await db()
+    .prepare(
+      `SELECT id, org_type, org_name FROM users
+       WHERE role='producer' AND id IN (${ids.map(() => '?').join(',')})`,
+    )
+    .all(...ids)) as Row[];
+  for (const row of rows) {
+    const line = String(row.org_name ?? '').trim() || String(row.org_type ?? '').trim();
+    if (line) lines.set(String(row.id), line);
+  }
+  return lines;
+}
+
 export async function getUserWithHash(email: string) {
   const row = (await db().prepare('SELECT * FROM users WHERE email=?').get(email.toLowerCase())) as
     Row | undefined;

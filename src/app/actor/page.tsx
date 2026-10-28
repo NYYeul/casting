@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { BrandLogo } from '@/components/brand';
 import { redirect } from 'next/navigation';
 import { formatDates } from '@/lib/schedule';
+import { getProducerOrgLines } from '@/lib/accounts';
 import { getActorId } from '@/lib/auth';
 import { listOpenRoles } from '@/lib/db';
 import MyApplications from './my-applications';
@@ -18,6 +19,7 @@ function shortDate(date: string) {
 export default async function ActorHome() {
   if (await getActorId()) redirect('/me');
   const roles = await listOpenRoles(new Date().toISOString().slice(0, 10));
+  const orgLines = await getProducerOrgLines(roles.map((role) => role.ownerId));
   return (
     <main className="app-shell narrow">
       <header className="home-header">
@@ -52,6 +54,9 @@ export default async function ActorHome() {
                   <span className="badge-soft">{shortDate(role.deadline)} 마감</span>
                   <h3>{role.projectTitle}</h3>
                   <p className="sub">{role.title}</p>
+                  {role.ownerId && orgLines.get(role.ownerId) && (
+                    <p className="org-line">{orgLines.get(role.ownerId)}</p>
+                  )}
                   <p className="meta">
                     촬영 {formatDates(role.shootDates, 1) || shortDate(role.shootDate)} ·{' '}
                     {role.location}
