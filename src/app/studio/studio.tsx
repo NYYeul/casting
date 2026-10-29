@@ -14,7 +14,6 @@ import { dDayLabel, daysUntilResult, isResultDueSoon, kstToday } from '@/lib/res
 import { formatDates } from '@/lib/schedule';
 import { useBackClose } from '@/lib/use-back-close';
 import { projectCover } from '@/lib/project-meta';
-import SwipeReview from './swipe-review';
 
 type Tab = 'home' | 'applicants' | 'messages' | 'profile';
 const TABS: Tab[] = ['home', 'applicants', 'messages', 'profile'];
@@ -391,8 +390,6 @@ export default function Studio({
   const [note, setNote] = useState('');
   const [pendingPublicStage, setPendingPublicStage] = useState<PublicStage | null>(null);
   const [photoAt, setPhotoAt] = useState<number | null>(null);
-  /** 카드 검토 중인 지원자 id 목록(들어올 때의 목록 순서). null이면 목록 화면 */
-  const [reviewDeck, setReviewDeck] = useState<string[] | null>(null);
   // 보관(숨김)한 프로젝트. 홈 맨 아래 '보관한 프로젝트'에서 다시 꺼낼 수 있다.
   const [archivedProjects, setArchivedProjects] = useState<Project[]>([]);
   const [showArchived, setShowArchived] = useState(false);
@@ -552,30 +549,6 @@ export default function Studio({
       setMessage(error instanceof Error ? error.message : '저장하지 못했습니다.');
     } finally {
       setBusy(false);
-    }
-  }
-
-  // 카드 검토용 저장. 카드를 바로 넘길 수 있게 화면 값을 먼저 바꾸고, 실패하면 되돌린 뒤 알린다.
-  // 한 장마다 '저장했습니다'를 띄우면 시끄러워서 성공은 따로 알리지 않는다.
-  async function saveReview(id: string, patch: Pick<Partial<Application>, 'status' | 'shortlist'>) {
-    const before = applications.find((item) => item.id === id);
-    setApplications((current) =>
-      current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
-    );
-    try {
-      const result = await api<{ application: Application }>(`/api/applications/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(patch),
-      });
-      setApplications((current) =>
-        current.map((item) => (item.id === id ? { ...item, ...result.application } : item)),
-      );
-      return true;
-    } catch (error) {
-      if (before)
-        setApplications((current) => current.map((item) => (item.id === id ? before : item)));
-      setMessage(error instanceof Error ? error.message : '저장하지 못했습니다.');
-      return false;
     }
   }
 
@@ -1056,25 +1029,44 @@ export default function Studio({
                     <span>오디션 후보</span>
                   </div>
                 </section>
-                {/* 지금 보이는 목록(필터·검색·정렬 그대로)을 카드 한 장씩 넘기며 분류한다. */}
-                <button
-                  className="swipe-entry"
-                  disabled={filtered.length === 0}
-                  onClick={() => setReviewDeck(filtered.map((item) => item.id))}
-                >
-                  <span className="swipe-entry-icon" aria-hidden>
-                    {Icon.vs}
-                  </span>
-                  <span className="txt">
-                    카드로 검토
-                    <small>
-                      {filtered.length > 0
-                        ? `${filter === 'all' ? '전체' : '지금 목록'} ${filtered.length}명 · 넘겨서 관심·보류·후보`
-                        : '이 조건의 지원자가 없어요'}
-                    </small>
-                  </span>
-                  <span className="chevron">›</span>
-                </button>
+                {/*
+                  이상형 월드컵식 1:1 비교(후보 비교 화면)로 바로 간다. 이 배역이 골라진 채로 열리고 후보도 바로 불러온다.
+                  '후보' 필터를 보고 있으면 오디션 후보끼리, 아니면 제외하지 않은 지원자 전체로 비교한다.
+                */}
+                {(() => {
+                  const finalsOnly = filter === 'shortlist';
+                  const count = finalsOnly
+                    ? applications.filter((item) => item.shortlist).length
+                    : applications.filter((item) => item.status !== 'excluded').length;
+                  const href = `/studio/compare?roleId=${encodeURIComponent(role.id)}&source=${finalsOnly ? 'final' : 'role'}`;
+                  return count >= 2 ? (
+                    <Link className="compare-entry" href={href}>
+                      <span className="compare-entry-icon" aria-hidden>
+                        {Icon.vs}
+                      </span>
+                      <span className="txt">
+                        월드컵으로 비교
+                        <small>
+                          {finalsOnly ? '오디션 후보' : '지원자'} {count}명을 두 명씩 붙여 최종 1인
+                          뽑기
+                        </small>
+                      </span>
+                      <span className="chevron">›</span>
+                    </Link>
+                  ) : (
+                    <div className="compare-entry is-off" aria-disabled="true">
+                      <span className="compare-entry-icon" aria-hidden>
+                        {Icon.vs}
+                      </span>
+                      <span className="txt">
+                        월드컵으로 비교
+                        <small>
+                          {finalsOnly ? '오디션 후보가' : '지원자가'} 2명 이상이면 비교할 수 있어요
+                        </small>
+                      </span>
+                    </div>
+                  );
+                })()}
                 <section>
                   <div className="section-head" style={{ marginTop: 22 }}>
                     <h2>{filter === 'shortlist' ? '오디션 후보' : '지원자 목록'}</h2>
@@ -1363,17 +1355,6 @@ export default function Studio({
           {message}
           <button aria-label="닫기">×</button>
         </div>
-      )}
-
-      {reviewDeck && (
-        <SwipeReview
-          deckIds={reviewDeck}
-          applications={applications}
-          roleTitle={role ? `${role.projectTitle} · ${role.title}` : ''}
-          save={saveReview}
-          onOpenDetail={(id) => setSelectedId(id)}
-          onClose={() => setReviewDeck(null)}
-        />
       )}
 
       {selected && (
