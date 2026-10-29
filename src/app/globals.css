@@ -1501,7 +1501,9 @@ img {
   margin: 0 0 7px;
 }
 .detail-block textarea,
-.detail-block select {
+.detail-fold textarea,
+.detail-block select,
+.detail-fold select {
   width: 100%;
   border: 1px solid #e1e6ef;
   border-radius: 12px;
@@ -4831,4 +4833,500 @@ img {
   flex: none;
   padding: 9px 12px;
   font-size: 12px;
+}
+
+/* ── 지원자 상세: 접는 칸 + 아래 고정 분류 버튼 ───────────── */
+.detail-fold {
+  border-top: 1px solid var(--line);
+  padding: 4px 0;
+}
+.detail-fold summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+.detail-fold summary::-webkit-details-marker {
+  display: none;
+}
+.detail-fold summary span {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.detail-fold summary::after {
+  content: '⌄';
+  color: var(--faint);
+  transition: transform 0.2s var(--ease);
+}
+.detail-fold[open] summary::after {
+  transform: rotate(180deg);
+}
+.detail-fold[open] {
+  padding-bottom: 14px;
+}
+.detail-fold > p {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.detail-sheet > .review-hint {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.text-button.inline {
+  padding: 0;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* 시트(.detail-sheet)가 스크롤 상자라 sticky로 아래에 붙인다. 시트 안쪽 여백만큼 밖으로 빼서 가장자리까지 채운다. */
+.detail-actions {
+  position: sticky;
+  bottom: calc(-26px - env(safe-area-inset-bottom));
+  margin: 4px -20px calc(-26px - env(safe-area-inset-bottom));
+  padding: 12px 20px calc(14px + env(safe-area-inset-bottom));
+  background: #ffffffee;
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.35fr;
+  gap: 8px;
+  z-index: 2;
+}
+.detail-actions button {
+  border: 1px solid #d9dee8;
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px 4px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.detail-actions button.selected {
+  background: var(--lavender);
+  border-color: var(--primary);
+}
+.detail-actions button.short {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--lime);
+}
+.detail-actions button.short.selected {
+  background: var(--lime);
+  color: var(--primary);
+}
+.detail-actions button:disabled {
+  opacity: 0.6;
+}
+
+/* ── 작품 포스터 고르기 (프로젝트 등록·수정) ───────────── */
+.poster-pick {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+}
+.poster-thumb {
+  width: 84px;
+  height: 93px;
+  flex: none;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0b0d12;
+}
+.poster-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.poster-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.poster-body strong {
+  font-size: 13px;
+}
+.poster-body strong i {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--faint);
+  font-size: 11px;
+}
+.poster-body p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.poster-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.poster-actions .button {
+  padding: 9px 14px;
+  font-size: 12.5px;
+}
+
+/* ── 카드로 검토(스와이프) ─────────────────────────── */
+.swipe-entry {
+  width: 100%;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid #000;
+  background: var(--primary);
+  color: #fff;
+  text-align: left;
+  box-shadow: 0 10px 22px #0b0d1229;
+}
+.swipe-entry:disabled {
+  opacity: 0.45;
+  box-shadow: none;
+}
+.swipe-entry-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--lime);
+  color: var(--primary);
+  flex: none;
+}
+.swipe-entry .txt {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 800;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.swipe-entry small {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--chrome);
+}
+.swipe-entry .chevron {
+  color: var(--lime);
+}
+.swipe-review {
+  position: fixed;
+  inset: 0;
+  z-index: 28; /* 하단바(20) 위, 지원자 상세 시트(30) 아래 */
+  background: radial-gradient(120% 70% at 50% 0%, #1f2532 0%, #0b0d12 60%);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  overscroll-behavior: contain;
+}
+.swipe-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px 8px;
+  width: min(480px, 100%);
+  margin: 0 auto;
+}
+.swipe-close {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid #ffffff26;
+  background: #ffffff12;
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+}
+.swipe-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.swipe-title strong {
+  font-size: 15px;
+}
+.swipe-title span {
+  font-size: 11.5px;
+  color: var(--chrome);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.swipe-count {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--lime);
+}
+.swipe-progress {
+  width: min(448px, calc(100% - 32px));
+  margin: 0 auto;
+  height: 3px;
+  border-radius: 3px;
+  background: #ffffff1f;
+  overflow: hidden;
+}
+.swipe-progress i {
+  display: block;
+  height: 100%;
+  background: var(--lime);
+  transition: width 0.25s var(--ease);
+}
+.swipe-stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  width: min(448px, calc(100% - 32px));
+  margin: 14px auto 0;
+}
+.swipe-card {
+  position: absolute;
+  inset: 0;
+  border-radius: 26px;
+  overflow: hidden;
+  background: #161a23;
+  box-shadow: 0 24px 50px #00000080;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+  transition:
+    transform 0.22s var(--ease),
+    opacity 0.22s linear;
+}
+.swipe-card.is-dragging {
+  transition: none;
+  cursor: grabbing;
+}
+.swipe-card.is-next {
+  transform: scale(0.94) translateY(14px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.swipe-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.swipe-initials {
+  display: grid;
+  place-items: center;
+  font-size: 64px;
+  font-weight: 800;
+  color: var(--chrome);
+  background: linear-gradient(160deg, #2a303d, #11141b);
+}
+.swipe-dots {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  gap: 4px;
+}
+.swipe-dots i {
+  flex: 1;
+  height: 3px;
+  border-radius: 3px;
+  background: #ffffff59;
+}
+.swipe-dots i.on {
+  background: #fff;
+}
+.swipe-stamp {
+  position: absolute;
+  top: 34px;
+  padding: 6px 14px;
+  border: 3px solid currentColor;
+  border-radius: 12px;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  background: #0b0d1259;
+  pointer-events: none;
+}
+.stamp-right {
+  left: 22px;
+  color: var(--lime);
+  transform: rotate(-12deg);
+}
+.stamp-left {
+  right: 22px;
+  color: #ffb36b;
+  transform: rotate(12deg);
+}
+.stamp-up {
+  left: 50%;
+  top: 40%;
+  color: #fff;
+  transform: translateX(-50%);
+}
+.swipe-info {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 70px 18px 16px;
+  background: linear-gradient(180deg, #0b0d1200 0%, #0b0d12d9 45%, #0b0d12 100%);
+}
+.swipe-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.swipe-name strong {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+.swipe-name small {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--chrome);
+}
+.swipe-star {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--primary);
+  background: var(--lime);
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+.swipe-info p {
+  margin: 8px 0 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #e9edf5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.swipe-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.swipe-meta span {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #ffffff1a;
+  color: #dfe4ee;
+}
+.swipe-meta span.positive {
+  color: var(--lime);
+}
+.swipe-more {
+  margin-top: 12px;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.swipe-actions {
+  width: min(448px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 16px 0 18px;
+  display: grid;
+  grid-template-columns: 0.8fr 1fr 1.15fr 1fr;
+  gap: 8px;
+  align-items: end;
+}
+.swipe-btn {
+  height: 64px;
+  border-radius: 20px;
+  border: 1px solid #ffffff26;
+  background: #ffffff10;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.swipe-btn small {
+  font-size: 11px;
+  font-weight: 700;
+}
+.swipe-btn.undo {
+  height: 54px;
+  font-size: 16px;
+  color: var(--chrome);
+}
+.swipe-btn.hold {
+  color: #ffb36b;
+}
+.swipe-btn.short {
+  height: 72px;
+  background: var(--metal);
+  color: var(--primary);
+  border-color: transparent;
+}
+.swipe-btn.like {
+  background: var(--lime);
+  color: var(--primary);
+  border-color: transparent;
+}
+.swipe-btn:disabled {
+  opacity: 0.4;
+}
+.swipe-done {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 0 18px;
+}
+.swipe-done strong {
+  font-size: 22px;
+}
+.swipe-done p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--chrome);
+}
+.swipe-done .button {
+  width: min(280px, 100%);
+}
+.swipe-done .button-outline {
+  background: transparent;
+  color: #fff;
+  border-color: #ffffff40;
 }

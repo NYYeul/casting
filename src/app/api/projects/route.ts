@@ -9,6 +9,7 @@ import {
 } from '@/lib/accounts';
 import { getProducerId } from '@/lib/auth';
 import { parseProjectBody } from '@/lib/project-input';
+import { deleteUploads } from '@/lib/storage';
 import { requiredText } from '@/lib/validation';
 
 export async function GET() {
@@ -68,6 +69,9 @@ export async function PATCH(request: NextRequest) {
     parsed.conditions,
     parsed.roles,
   );
+  // 포스터를 바꾸거나 뺐으면 예전 포스터 파일은 지운다(실패해도 저장은 그대로).
+  if (current.posterUrl && current.posterUrl !== parsed.project.posterUrl)
+    await deleteUploads([current.posterUrl]);
   return NextResponse.json(saved);
 }
 
@@ -81,6 +85,7 @@ export async function DELETE(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const id = requiredText(body.id, 60);
   if (!id) return NextResponse.json({ error: '프로젝트 id가 필요합니다.' }, { status: 400 });
+  const poster = (await getProject(id))?.posterUrl;
   const result = await deleteProject(producerId, id);
   if (result === 'missing')
     return NextResponse.json({ error: '프로젝트를 찾을 수 없습니다.' }, { status: 404 });
@@ -92,5 +97,6 @@ export async function DELETE(request: NextRequest) {
       },
       { status: 409 },
     );
+  if (poster) await deleteUploads([poster]);
   return NextResponse.json({ deleted: true });
 }

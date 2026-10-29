@@ -74,6 +74,8 @@ export type Project = {
   location: string;
   /** 시놉시스 */
   description: string;
+  /** 작품 포스터(/api/uploads/ 사진). 비어 있으면 형식별 기본 커버 */
+  posterUrl: string;
   /** 제공 항목(교통비·식사·숙박) */
   perks: string[];
   createdAt: string;
@@ -107,6 +109,7 @@ export const EMPTY_PROJECT: ProjectInput = {
   location: '',
   description: '',
   perks: [],
+  posterUrl: '',
 };
 
 /** 모든 배역에 똑같이 들어가는 지원 조건. 프로젝트 등록·수정의 '조건·담당' 단계 값이다. */
@@ -419,6 +422,7 @@ function projectFromRow(row: Row): Project {
     location: textOf(row.location),
     description: textOf(row.description),
     perks: listOf(row.perks),
+    posterUrl: textOf(row.poster_url),
     createdAt: String(row.created_at),
     archivedAt: row.archived_at ? String(row.archived_at) : null,
   };
@@ -461,6 +465,7 @@ const PROJECT_COLUMNS = [
   'location',
   'description',
   'perks',
+  'poster_url',
 ];
 
 function projectValues(input: ProjectInput) {
@@ -487,6 +492,7 @@ function projectValues(input: ProjectInput) {
     input.location,
     input.description,
     JSON.stringify(input.perks),
+    input.posterUrl,
   ];
 }
 
@@ -803,6 +809,10 @@ export async function deleteAccount(userId: string) {
         ...(JSON.parse(profile.documents || '[]') as { url: string }[]).map((doc) => doc.url),
       );
     }
+    const posters = (await db()
+      .prepare("SELECT poster_url FROM projects WHERE owner_id=? AND poster_url<>''")
+      .all(userId)) as { poster_url: string }[];
+    files.push(...posters.map((row) => row.poster_url));
     const apps = (await db()
       .prepare(`SELECT photo_url, photo_urls FROM applications WHERE id IN (${appIds})`)
       .all(userId, userId)) as { photo_url: string; photo_urls: string }[];

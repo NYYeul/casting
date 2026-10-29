@@ -13,6 +13,8 @@ import type { Project } from '@/lib/accounts';
 import { dDayLabel, daysUntilResult, isResultDueSoon, kstToday } from '@/lib/result-deadline';
 import { formatDates } from '@/lib/schedule';
 import { useBackClose } from '@/lib/use-back-close';
+import { projectCover } from '@/lib/project-meta';
+import SwipeReview from './swipe-review';
 
 type Tab = 'home' | 'applicants' | 'messages' | 'profile';
 const TABS: Tab[] = ['home', 'applicants', 'messages', 'profile'];
@@ -389,6 +391,8 @@ export default function Studio({
   const [note, setNote] = useState('');
   const [pendingPublicStage, setPendingPublicStage] = useState<PublicStage | null>(null);
   const [photoAt, setPhotoAt] = useState<number | null>(null);
+  /** 카드 검토 중인 지원자 id 목록(들어올 때의 목록 순서). null이면 목록 화면 */
+  const [reviewDeck, setReviewDeck] = useState<string[] | null>(null);
   // 보관(숨김)한 프로젝트. 홈 맨 아래 '보관한 프로젝트'에서 다시 꺼낼 수 있다.
   const [archivedProjects, setArchivedProjects] = useState<Project[]>([]);
   const [showArchived, setShowArchived] = useState(false);
@@ -548,6 +552,30 @@ export default function Studio({
       setMessage(error instanceof Error ? error.message : '저장하지 못했습니다.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  // 카드 검토용 저장. 카드를 바로 넘길 수 있게 화면 값을 먼저 바꾸고, 실패하면 되돌린 뒤 알린다.
+  // 한 장마다 '저장했습니다'를 띄우면 시끄러워서 성공은 따로 알리지 않는다.
+  async function saveReview(id: string, patch: Pick<Partial<Application>, 'status' | 'shortlist'>) {
+    const before = applications.find((item) => item.id === id);
+    setApplications((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    );
+    try {
+      const result = await api<{ application: Application }>(`/api/applications/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      });
+      setApplications((current) =>
+        current.map((item) => (item.id === id ? { ...item, ...result.application } : item)),
+      );
+      return true;
+    } catch (error) {
+      if (before)
+        setApplications((current) => current.map((item) => (item.id === id ? before : item)));
+      setMessage(error instanceof Error ? error.message : '저장하지 못했습니다.');
+      return false;
     }
   }
 
@@ -771,11 +799,7 @@ export default function Studio({
                     <div className="pcard-top">
                       <div className="pcard-img">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={`https://picsum.photos/seed/${first.slug}/240/264`}
-                          alt=""
-                          loading="lazy"
-                        />
+                        <img src={first.coverUrl || projectCover('')} alt="" loading="lazy" />
                       </div>
                       <div className="pcard-info">
                         <span className={`badge-soft${project.closed ? ' state-off' : ''}`}>
@@ -1032,6 +1056,25 @@ export default function Studio({
                     <span>오디션 후보</span>
                   </div>
                 </section>
+                {/* 지금 보이는 목록(필터·검색·정렬 그대로)을 카드 한 장씩 넘기며 분류한다. */}
+                <button
+                  className="swipe-entry"
+                  disabled={filtered.length === 0}
+                  onClick={() => setReviewDeck(filtered.map((item) => item.id))}
+                >
+                  <span className="swipe-entry-icon" aria-hidden>
+                    {Icon.vs}
+                  </span>
+                  <span className="txt">
+                    카드로 검토
+                    <small>
+                      {filtered.length > 0
+                        ? `${filter === 'all' ? '전체' : '지금 목록'} ${filtered.length}명 · 넘겨서 관심·보류·후보`
+                        : '이 조건의 지원자가 없어요'}
+                    </small>
+                  </span>
+                  <span className="chevron">›</span>
+                </button>
                 <section>
                   <div className="section-head" style={{ marginTop: 22 }}>
                     <h2>{filter === 'shortlist' ? '오디션 후보' : '지원자 목록'}</h2>
@@ -1322,6 +1365,17 @@ export default function Studio({
         </div>
       )}
 
+      {reviewDeck && (
+        <SwipeReview
+          deckIds={reviewDeck}
+          applications={applications}
+          roleTitle={role ? `${role.projectTitle} · ${role.title}` : ''}
+          save={saveReview}
+          onOpenDetail={(id) => setSelectedId(id)}
+          onClose={() => setReviewDeck(null)}
+        />
+      )}
+
       {selected && (
         <div className="sheet-backdrop" onClick={() => setSelectedId(null)}>
           <section
@@ -1405,45 +1459,25 @@ export default function Studio({
                 </a>
               )}
             </div>
-            <div className="detail-block">
-              <h3>내부 검토</h3>
-              <div className="review-buttons">
-                {(
-                  [
-                    ['excluded', '제외'],
-                    ['hold', '보류'],
-                    ['interested', '관심 있음'],
-                  ] as [ReviewStatus, string][]
-                ).map(([status, label]) => {
-                  const picked = selected.status === status;
-                  return (
-                    <button
-                      key={status}
-                      disabled={busy}
-                      aria-pressed={picked}
-                      title={picked ? '다시 누르면 선택이 풀려요' : undefined}
-                      className={picked ? 'selected' : ''}
-                      // 같은 버튼을 다시 누르면 '신규'로 되돌려 선택을 푼다.
-                      onClick={() =>
-                        void updateApplication(selected.id, { status: picked ? 'new' : status })
-                      }
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="review-hint">
-                {selected.status === 'new'
-                  ? '아직 분류하지 않았어요. 고른 버튼을 한 번 더 누르면 이 상태로 돌아옵니다.'
-                  : `현재 ${reviewLabels[selected.status]}. 같은 버튼을 다시 누르면 선택이 풀려요.`}
-                <br />이 분류는 팀 전체가 함께 보는 값이라 팀 보드의 단계도 같이 바뀝니다.
-              </p>
-              <label className="field-label" htmlFor="review-note">
+            <button
+              className="button button-outline full"
+              style={{ marginBottom: 12 }}
+              onClick={() => {
+                setChatId(selected.id);
+                setSelectedId(null);
+              }}
+            >
+              연락하기 · 오디션 일정 제안
+            </button>
+            {/* 메모와 결과 공개는 자주 쓰지 않아 접어 둔다. 분류 버튼은 시트 아래에 고정. */}
+            <details className="detail-fold">
+              <summary>
                 팀 내부 메모
-              </label>
+                <span>{selected.note ? '메모 있음' : '없음'}</span>
+              </summary>
               <textarea
                 id="review-note"
+                aria-label="팀 내부 메모"
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 rows={3}
@@ -1456,9 +1490,18 @@ export default function Studio({
               >
                 메모 저장
               </button>
-            </div>
-            <div className="detail-block public-block">
-              <h3>배우에게 공개할 결과</h3>
+            </details>
+            <details className="detail-fold public-block">
+              <summary>
+                배우에게 공개할 결과
+                <span>
+                  {selected.publicStage === 'received'
+                    ? selected.viewedAt
+                      ? '검토 중'
+                      : '미열람'
+                    : publicLabels[selected.publicStage]}
+                </span>
+              </summary>
               <p>
                 선택 후 저장하면 배우의 지원 현황에 표시됩니다. 결과를 정하기 전에는 배우에게{' '}
                 <strong>{selected.viewedAt ? '검토 중' : '미열람'}</strong>으로 보여요.
@@ -1511,31 +1554,74 @@ export default function Studio({
                   </button>
                 </div>
               )}
+            </details>
+            <p className="review-hint">
+              {selected.status === 'excluded' ? (
+                <>
+                  제외로 분류했어요.{' '}
+                  <button
+                    className="text-button inline"
+                    disabled={busy}
+                    onClick={() => void updateApplication(selected.id, { status: 'new' })}
+                  >
+                    제외 풀기
+                  </button>
+                </>
+              ) : (
+                <>
+                  조건이 맞지 않으면{' '}
+                  <button
+                    className="text-button inline"
+                    disabled={busy}
+                    onClick={() => void updateApplication(selected.id, { status: 'excluded' })}
+                  >
+                    제외로 분류
+                  </button>
+                </>
+              )}
+              <br />
+              분류는 팀 전체가 함께 보는 값이라 팀 보드의 단계도 같이 바뀝니다.
+            </p>
+            {/* 시트를 끝까지 내리지 않아도 바로 분류할 수 있게 아래에 고정한다. 다시 누르면 선택이 풀린다. */}
+            <div className="detail-actions" role="group" aria-label="지원자 분류">
+              {(
+                [
+                  ['hold', '보류'],
+                  ['interested', '관심'],
+                ] as [ReviewStatus, string][]
+              ).map(([status, label]) => {
+                const picked = selected.status === status;
+                return (
+                  <button
+                    key={status}
+                    disabled={busy}
+                    aria-pressed={picked}
+                    className={picked ? 'selected' : ''}
+                    title={picked ? '다시 누르면 선택이 풀려요' : undefined}
+                    onClick={() =>
+                      void updateApplication(selected.id, { status: picked ? 'new' : status })
+                    }
+                  >
+                    {picked && '✓ '}
+                    {label}
+                  </button>
+                );
+              })}
+              <button
+                disabled={busy}
+                aria-pressed={selected.shortlist}
+                className={`short${selected.shortlist ? ' selected' : ''}`}
+                title={selected.shortlist ? '다시 누르면 후보에서 빠져요' : undefined}
+                onClick={() =>
+                  void updateApplication(selected.id, {
+                    shortlist: !selected.shortlist,
+                    status: !selected.shortlist ? 'interested' : selected.status,
+                  })
+                }
+              >
+                {selected.shortlist ? '★ 오디션 후보' : '☆ 오디션 후보'}
+              </button>
             </div>
-            <button
-              className="button button-outline full"
-              style={{ marginBottom: 9 }}
-              onClick={() => {
-                setChatId(selected.id);
-                setSelectedId(null);
-              }}
-            >
-              연락하기 · 오디션 일정 제안
-            </button>
-            <button
-              className={
-                selected.shortlist ? 'button button-outline full' : 'button button-primary full'
-              }
-              disabled={busy}
-              onClick={() =>
-                void updateApplication(selected.id, {
-                  shortlist: !selected.shortlist,
-                  status: !selected.shortlist ? 'interested' : selected.status,
-                })
-              }
-            >
-              {selected.shortlist ? '후보 목록에서 제거' : '☆ 오디션 후보에 추가'}
-            </button>
           </section>
         </div>
       )}
@@ -1568,7 +1654,7 @@ export default function Studio({
                 peerSub={`${role?.projectTitle || ''} · ${role?.title || ''}`}
                 projectTitle={role?.projectTitle || ''}
                 roleTitle={role?.title || ''}
-                projectImage={`https://picsum.photos/seed/${role?.slug}/96/96`}
+                projectImage={role?.coverUrl || projectCover('')}
                 onViewProfile={() => {
                   setSelectedId(chatId);
                   setChatId(null);
