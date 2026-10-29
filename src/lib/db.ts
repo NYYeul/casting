@@ -3,7 +3,7 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import { hashPassword } from './password';
 import type { Application, Audition, ChatMessage, PublicStage, ReviewStatus, Role } from './types';
 import { demoFace } from './demo-faces';
-import { splitLocation } from './project-meta';
+import { projectCover, splitLocation } from './project-meta';
 import { resultDueDate } from './result-deadline';
 import { matchesRoleFilters, type RoleFilters } from './role-search';
 import { conn as rawConnection, withAdvisoryLock, type Conn, type Statement } from './sql';
@@ -59,7 +59,7 @@ async function initialize(database: Conn) {
   const migrated = await database
     .prepare(
       `SELECT 1 FROM information_schema.columns
-       WHERE table_schema = current_schema() AND table_name='applications' AND column_name='result_auto_at'`,
+       WHERE table_schema = current_schema() AND table_name='projects' AND column_name='poster_url'`,
     )
     .get();
   if (!migrated) {
@@ -241,8 +241,10 @@ async function initialize(database: Conn) {
     // 프로젝트 보관(숨김): 보관한 시각. 비어 있으면 진행 중. 지원자가 있는 프로젝트는 지우지 않고 보관한다.
     await addColumn(database, 'projects', 'archived_at', 'TEXT');
     // 결과 자동 안내: 결과 기준일이 지나 자동으로 불합격을 안내한 시각. 제작진이 직접 정하면 비운다.
-    // 이 칸이 구조 변경 기준(맨 위 migrated)이라 반드시 마지막에 추가한다.
     await addColumn(database, 'applications', 'result_auto_at', 'TEXT');
+    // 작품 포스터: /api/uploads/ 사진 주소. 비어 있으면 형식별 기본 커버(projectCover)를 쓴다.
+    // 이 칸이 구조 변경 기준(맨 위 migrated)이라 반드시 마지막에 추가한다.
+    await addColumn(database, 'projects', 'poster_url', text);
   }
   if (
     (process.env.NODE_ENV !== 'production' || process.env.DEMO_BUILD === 'true') &&
@@ -522,6 +524,7 @@ function roleFromRow(row: Record<string, unknown>): Role {
     ),
     ownerId: row.owner_id ? String(row.owner_id) : null,
     projectId: row.project_id ? String(row.project_id) : null,
+    coverUrl: projectCover(String(row.cover_format ?? ''), String(row.cover_poster ?? '')),
   };
 }
 
@@ -595,13 +598,18 @@ const CHAT_SUMMARY = `
   (SELECT m.status FROM chat_messages m WHERE m.application_id=applications.id AND m.kind='offer' ORDER BY m.created_at DESC LIMIT 1) offer_status,
   (SELECT m.selected_slot FROM chat_messages m WHERE m.application_id=applications.id AND m.kind='offer' AND m.status='confirmed' ORDER BY m.created_at DESC LIMIT 1) confirmed_slot`;
 
+// 작품 이미지(roleFromRow의 coverUrl)를 만들 형식·포스터. 배우 검색(searchOpenRoles)의 project_format과 이름이 겹치지 않게 cover_를 붙인다.
+const ROLE_COVER = `(SELECT p.genre FROM projects p WHERE p.id=roles.project_id) cover_format,
+      (SELECT p.poster_url FROM projects p WHERE p.id=roles.project_id) cover_poster`;
+
 // 결과 전 지원자 수(pending)와 작품의 오디션 종료일은 결과 자동 안내 기준일·미리 알림에 쓴다.
 const ROLE_STATS = `SELECT roles.*, COUNT(applications.id) application_count,
       SUM(CASE WHEN applications.status='new' THEN 1 ELSE 0 END) new_count,
       COALESCE(SUM(applications.shortlist),0) shortlist_count,
       SUM(CASE WHEN applications.public_stage='received' THEN 1 ELSE 0 END) pending_count,
       SUM(CASE WHEN applications.public_stage='received' THEN applications.shortlist ELSE 0 END) pending_shortlist_count,
-      (SELECT p.audition_end FROM projects p WHERE p.id=roles.project_id) project_audition_end
+      (SELECT p.audition_end FROM projects p WHERE p.id=roles.project_id) project_audition_end,
+      ${ROLE_COVER}
       FROM roles
     LEFT JOIN applications ON applications.role_id=roles.id`;
 
@@ -688,7 +696,8 @@ export async function getRole(slug: string) {
 export async function getRoleById(id: string) {
   const row = await db()
     .prepare(
-      `SELECT roles.*, (SELECT p.audition_end FROM projects p WHERE p.id=roles.project_id) project_audition_end
+      `SELECT roles.*, (SELECT p.audition_end FROM projects p WHERE p.id=roles.project_id) project_audition_end,
+      ${ROLE_COVER}
       FROM roles WHERE id=?`,
     )
     .get(id);

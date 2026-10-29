@@ -9,6 +9,7 @@ import { kstToday } from '@/lib/result-deadline';
 import { actorStageInfo, actorStageMessage, actorStageOf, type ActorStage } from '@/lib/types';
 import ChatThread from '@/components/chat-thread';
 import OfferResponse from '@/components/offer-response';
+import { projectCover } from '@/lib/project-meta';
 
 export const dynamic = 'force-dynamic';
 
@@ -139,7 +140,7 @@ export default async function StatusPage({ params }: { params: Promise<{ token: 
               peerSub={`${role.projectTitle} · ${role.title}`}
               projectTitle={role.projectTitle}
               roleTitle={role.title}
-              projectImage={`https://picsum.photos/seed/${role.slug}/96/96`}
+              projectImage={role.coverUrl || projectCover('')}
               profileHref={`/apply/${role.slug}`}
             />
           </section>

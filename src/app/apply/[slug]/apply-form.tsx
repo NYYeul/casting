@@ -13,6 +13,7 @@ import {
   NO_SPECIAL_SCENE,
   ageRangeLabel,
   specialScenesLabel,
+  projectCover,
 } from '@/lib/project-meta';
 import { formatDates, formatPeriod } from '@/lib/schedule';
 import type { Role } from '@/lib/types';
@@ -94,7 +95,7 @@ export default function ApplyForm({
       id: role.id,
       name: role.projectTitle,
       sub: `${role.title} · ${role.location}`,
-      photo: `https://picsum.photos/seed/${role.slug}/120/120`,
+      photo: role.coverUrl || projectCover(''),
       href: `/apply/${role.slug}`,
     });
   }, [role.id, role.projectTitle, role.title, role.location, role.slug]);

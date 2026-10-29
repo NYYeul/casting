@@ -43,6 +43,8 @@ export type Role = {
   shortlistCount?: number;
   ownerId?: string | null;
   projectId?: string | null;
+  /** 작품 이미지: 올린 포스터 또는 형식별 기본 커버(projectCover). */
+  coverUrl?: string;
   /** 결과 기준일(결과 안내일, 오디션 종료일이 더 늦으면 그날). 날짜가 아니면 ''. */
   resultDueDate?: string;
   /** 아직 결과 전(received)인 지원자 수와 그중 오디션 후보로 표시한 수 */

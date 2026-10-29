@@ -176,3 +176,28 @@ export const ROLE_FILTER_OPTIONS = {
   regions: PROJECT_REGIONS,
   roleTypes: Object.keys(ROLE_TYPES),
 };
+
+/** 형식별 기본 커버(public/covers/). 포스터를 올리지 않은 작품은 형식에 맞는 그림을 쓴다. */
+const FORMAT_COVERS: Record<string, string> = {
+  단편영화: 'short',
+  장편영화: 'feature',
+  웹드라마: 'webdrama',
+  숏폼: 'shortform',
+  광고: 'ad',
+  뮤직비디오: 'mv',
+  연극: 'stage',
+  기타: 'etc',
+};
+
+/** 업로드한 포스터 주소인지(/api/uploads/의 사진만. PDF는 안 됨). */
+export function isPosterUrl(value: unknown): value is string {
+  return (
+    typeof value === 'string' && /^\/api\/uploads\/[a-f0-9-]{36}\.(?:jpg|png|webp)$/.test(value)
+  );
+}
+
+/** 작품 이미지: 올린 포스터가 있으면 포스터, 없으면 형식별 기본 커버. */
+export function projectCover(format: string, posterUrl = '') {
+  if (isPosterUrl(posterUrl)) return posterUrl;
+  return `/covers/${FORMAT_COVERS[format] ?? 'etc'}.svg`;
+}

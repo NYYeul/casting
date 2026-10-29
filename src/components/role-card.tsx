@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { OpenRoleListing } from '@/lib/db';
-import { ROLE_GENDERS, ROLE_TYPES, ageRangeLabel } from '@/lib/project-meta';
+import { ROLE_GENDERS, ROLE_TYPES, ageRangeLabel, projectCover } from '@/lib/project-meta';
 import { formatDates } from '@/lib/schedule';
 
 function shortDate(date: string) {
@@ -32,7 +32,7 @@ export default function RoleCard({
       <div className="pcard-top">
         <div className="pcard-img" style={{ width: 96, height: 104 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`https://picsum.photos/seed/${role.slug}/200/220`} alt="" />
+          <img src={role.coverUrl || projectCover(role.projectFormat)} alt="" />
         </div>
         <div className="pcard-info">
           <span className="badge-soft">

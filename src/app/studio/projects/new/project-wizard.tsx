@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ProducerNav from '@/components/producer-nav';
 import {
   FORMATS,
@@ -16,6 +16,7 @@ import {
   SPECIAL_SCENES,
   ageRangeLabel,
   normalizeSpecialScenes,
+  projectCover,
   specialScenesLabel,
   splitLocation,
 } from '@/lib/project-meta';
@@ -79,6 +80,8 @@ export type ProjectDraft = {
   director: string;
   producerName: string;
   logline: string;
+  /** 작품 포스터(/api/uploads/ 사진). 비우면 형식별 기본 커버 */
+  posterUrl: string;
   description: string;
   region: string;
   locationDetail: string;
@@ -134,6 +137,7 @@ function blankDraft(contactName: string): ProjectDraft {
     director: '',
     producerName: '',
     logline: '',
+    posterUrl: '',
     description: '',
     region: '서울',
     locationDetail: '',
@@ -165,6 +169,7 @@ function restoreDraft(saved: unknown, base: ProjectDraft): ProjectDraft {
     genres: list(raw.genres),
     releaseChannels: list(raw.releaseChannels),
     perks: list(raw.perks),
+    posterUrl: typeof raw.posterUrl === 'string' ? raw.posterUrl : '',
     roles: (Array.isArray(raw.roles) && raw.roles.length ? raw.roles : [{}]).map((role) => ({
       ...blankRole(),
       ...(role as Partial<RoleDraft>),
@@ -489,6 +494,11 @@ export default function ProjectWizard({ contactName, editId, initial, removal }:
                       </select>
                     </label>
                   </div>
+                  <PosterPicker
+                    format={draft.genre}
+                    posterUrl={draft.posterUrl}
+                    onChange={(posterUrl) => setDraft((current) => ({ ...current, posterUrl }))}
+                  />
                   <fieldset className="wiz-field">
                     <legend>
                       장르 <i>여러 개 선택</i>
@@ -1248,6 +1258,92 @@ export default function ProjectWizard({ contactName, editId, initial, removal }:
         </div>
       )}
     </main>
+  );
+}
+
+/**
+ * 작품 포스터 올리기. 비워 두면 형식에 맞는 기본 커버가 프로젝트 카드·대화에 쓰인다.
+ * 업로드는 /api/uploads(storage.ts: Vercel Blob 또는 로컬 폴더)를 그대로 쓴다.
+ */
+function PosterPicker({
+  format,
+  posterUrl,
+  onChange,
+}: {
+  format: string;
+  posterUrl: string;
+  onChange: (posterUrl: string) => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+
+  async function upload(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadError('');
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const response = await fetch('/api/uploads', { method: 'POST', body: form });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '포스터를 올리지 못했습니다.');
+      if (String(data.url).endsWith('.pdf'))
+        throw new Error('포스터는 사진 파일만 올릴 수 있어요.');
+      onChange(data.url);
+    } catch (reason) {
+      setUploadError(reason instanceof Error ? reason.message : '포스터를 올리지 못했습니다.');
+    } finally {
+      setUploading(false);
+      if (input.current) input.current.value = '';
+    }
+  }
+
+  return (
+    <div className="wiz-field poster-pick">
+      <div className="poster-thumb">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={projectCover(format, posterUrl)} alt="작품 이미지 미리 보기" />
+      </div>
+      <div className="poster-body">
+        <strong>
+          포스터 <i>선택</i>
+        </strong>
+        <p>
+          {posterUrl
+            ? '프로젝트 카드와 배우와의 대화에 이 포스터가 보여요.'
+            : '올리지 않으면 형식에 맞는 기본 커버가 보여요.'}
+        </p>
+        <div className="poster-actions">
+          <button
+            type="button"
+            className="button button-outline"
+            disabled={uploading}
+            onClick={() => input.current?.click()}
+          >
+            {uploading ? '올리는 중…' : posterUrl ? '바꾸기' : '포스터 올리기'}
+          </button>
+          {posterUrl && (
+            <button type="button" className="text-button" onClick={() => onChange('')}>
+              기본 커버로
+            </button>
+          )}
+        </div>
+        {uploadError && (
+          <p className="form-error" role="alert">
+            {uploadError}
+          </p>
+        )}
+        <input
+          ref={input}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          hidden
+          onChange={(event) => void upload(event.target.files)}
+        />
+      </div>
+    </div>
   );
 }
 

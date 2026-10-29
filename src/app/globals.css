@@ -1501,7 +1501,9 @@ img {
   margin: 0 0 7px;
 }
 .detail-block textarea,
-.detail-block select {
+.detail-fold textarea,
+.detail-block select,
+.detail-fold select {
   width: 100%;
   border: 1px solid #e1e6ef;
   border-radius: 12px;
@@ -4831,4 +4833,200 @@ img {
   flex: none;
   padding: 9px 12px;
   font-size: 12px;
+}
+
+/* ── 지원자 상세: 접는 칸 + 아래 고정 분류 버튼 ───────────── */
+.detail-fold {
+  border-top: 1px solid var(--line);
+  padding: 4px 0;
+}
+.detail-fold summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+.detail-fold summary::-webkit-details-marker {
+  display: none;
+}
+.detail-fold summary span {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.detail-fold summary::after {
+  content: '⌄';
+  color: var(--faint);
+  transition: transform 0.2s var(--ease);
+}
+.detail-fold[open] summary::after {
+  transform: rotate(180deg);
+}
+.detail-fold[open] {
+  padding-bottom: 14px;
+}
+.detail-fold > p {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.detail-sheet > .review-hint {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.text-button.inline {
+  padding: 0;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* 시트(.detail-sheet)가 스크롤 상자라 sticky로 아래에 붙인다. 시트 안쪽 여백만큼 밖으로 빼서 가장자리까지 채운다. */
+.detail-actions {
+  position: sticky;
+  bottom: calc(-26px - env(safe-area-inset-bottom));
+  margin: 4px -20px calc(-26px - env(safe-area-inset-bottom));
+  padding: 12px 20px calc(14px + env(safe-area-inset-bottom));
+  background: #ffffffee;
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.35fr;
+  gap: 8px;
+  z-index: 2;
+}
+.detail-actions button {
+  border: 1px solid #d9dee8;
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px 4px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.detail-actions button.selected {
+  background: var(--lavender);
+  border-color: var(--primary);
+}
+.detail-actions button.short {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--lime);
+}
+.detail-actions button.short.selected {
+  background: var(--lime);
+  color: var(--primary);
+}
+.detail-actions button:disabled {
+  opacity: 0.6;
+}
+
+/* ── 작품 포스터 고르기 (프로젝트 등록·수정) ───────────── */
+.poster-pick {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+}
+.poster-thumb {
+  width: 84px;
+  height: 93px;
+  flex: none;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0b0d12;
+}
+.poster-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.poster-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.poster-body strong {
+  font-size: 13px;
+}
+.poster-body strong i {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--faint);
+  font-size: 11px;
+}
+.poster-body p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.poster-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.poster-actions .button {
+  padding: 9px 14px;
+  font-size: 12.5px;
+}
+
+/* ── 지원자 화면: 월드컵(후보 비교)으로 가는 버튼 ─────────── */
+.compare-entry {
+  width: 100%;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid #000;
+  background: var(--primary);
+  color: #fff;
+  text-align: left;
+  text-decoration: none;
+  box-shadow: 0 10px 22px #0b0d1229;
+}
+.compare-entry.is-off {
+  opacity: 0.45;
+  box-shadow: none;
+}
+.compare-entry-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--lime);
+  color: var(--primary);
+  flex: none;
+}
+.compare-entry .txt {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 800;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.compare-entry small {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--chrome);
+}
+.compare-entry .chevron {
+  color: var(--lime);
 }

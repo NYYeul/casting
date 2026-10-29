@@ -112,14 +112,26 @@ export default function CompareClient() {
     }
   }, []);
 
+  // 지원자 화면의 '월드컵으로 비교'로 들어오면 주소에 배역(roleId)과 소스(role·final)가 있다.
+  // 그 배역을 골라 두고 후보를 바로 불러와서, 인원만 고르면 대결을 시작할 수 있게 한다.
+  const [autoLoad, setAutoLoad] = useState(false);
+
   useEffect(() => {
     void loadResults();
+    const params = new URLSearchParams(location.search);
+    const wantedRole = params.get('roleId');
+    const wantedSource = params.get('source');
+    if (wantedSource === 'role' || wantedSource === 'final') setSource(wantedSource);
     fetch('/api/roles', { cache: 'no-store' })
       .then((response) => (response.ok ? response.json() : { roles: [] }))
       .then((data) => {
         const list: RoleOption[] = data.roles ?? [];
         setRoles(list);
-        if (list[0]) setRoleId(list[0].id);
+        const known = list.find((role) => role.id === wantedRole);
+        if (known) {
+          setRoleId(known.id);
+          setAutoLoad(true);
+        } else if (list[0]) setRoleId(list[0].id);
       })
       .catch(() => setRoles([]));
   }, [loadResults]);
@@ -150,6 +162,12 @@ export default function CompareClient() {
       setLoading(false);
     }
   }, [source, roleId, gender]);
+
+  useEffect(() => {
+    if (!autoLoad || !roleId) return;
+    setAutoLoad(false);
+    void loadCandidates();
+  }, [autoLoad, roleId, loadCandidates]);
 
   function toggle(id: string) {
     setChecked((current) => {
