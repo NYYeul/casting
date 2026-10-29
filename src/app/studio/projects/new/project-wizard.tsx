@@ -19,6 +19,8 @@ import {
   specialScenesLabel,
   splitLocation,
 } from '@/lib/project-meta';
+import type { ProjectUsage } from '@/lib/accounts';
+import { RESULT_WARNING_DAYS, resultDueDate } from '@/lib/result-deadline';
 import { daysBetween, formatDates, formatPeriod, normalizeDates } from '@/lib/schedule';
 
 // 등록과 수정이 같은 5단계를 쓴다. 배역 수정도 여기서 한다('수정'은 모두 프로젝트 수정에 모은다).
@@ -197,15 +199,56 @@ type Props = {
   editId?: string;
   /** 수정 모드: 저장된 프로젝트와 배역 */
   initial?: ProjectDraft;
+  /** 수정 모드: 프로젝트 정리(삭제·보관) 방법과 연결된 기록 수 */
+  removal?: { mode: 'delete' | 'archive'; usage: ProjectUsage; archived: boolean };
 };
 
-export default function ProjectWizard({ contactName, editId, initial }: Props) {
+export default function ProjectWizard({ contactName, editId, initial, removal }: Props) {
   const isEdit = Boolean(editId);
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<ProjectDraft>(() => initial ?? blankDraft(contactName));
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  // 프로젝트 정리: 확인 패널을 연 상태, 진행 중, 오류. 확인 사이에 지원이 들어오면 보관으로 바뀐다.
+  const [removalMode, setRemovalMode] = useState(removal?.mode ?? 'delete');
+  const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState('');
+
+  async function cleanUp() {
+    if (!editId || !removal) return;
+    setRemoving(true);
+    setRemoveError('');
+    try {
+      const response = await fetch('/api/projects', {
+        method: removalMode === 'delete' && !removal.archived ? 'DELETE' : 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          removalMode === 'delete' && !removal.archived
+            ? { id: editId }
+            : { id: editId, archived: !removal.archived },
+        ),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        location.href = `/login?next=/studio/projects/${editId}/edit`;
+        return;
+      }
+      if (response.status === 409 && data.canArchive) {
+        // 그사이 지원서가 들어왔다. 지우지 않고 보관하도록 안내를 바꾼다.
+        setRemovalMode('archive');
+        setRemoveError('그사이 지원자가 생겨 삭제할 수 없어요. 대신 보관할 수 있어요.');
+        setRemoving(false);
+        return;
+      }
+      if (!response.ok) throw new Error(data.error || '프로젝트를 정리하지 못했습니다.');
+      location.replace('/studio');
+    } catch (reason) {
+      setRemoveError(reason instanceof Error ? reason.message : '프로젝트를 정리하지 못했습니다.');
+      setRemoving(false);
+    }
+  }
 
   useEffect(() => {
     if (isEdit) return; // 수정 모드에서는 신규 등록 임시 저장을 불러오지 않는다
@@ -379,6 +422,7 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
     }
   }
 
+  const resultDue = resultDueDate(draft.announcementDate, draft.auditionEnd);
   const sessions = Number(draft.shootSessions) || 0;
   const shootSummary = projectDays.length
     ? `${formatPeriod(draft.shootStart, draft.shootEnd)}${sessions ? ` · 총 ${sessions}회차` : ''}`
@@ -985,6 +1029,14 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
                       />
                     </label>
                   </div>
+                  <p className="wiz-note result-rule">
+                    {resultDue
+                      ? `결과 기준일은 ${formatPeriod(resultDue)}${resultDue !== draft.announcementDate ? '(오디션 종료일)' : ''}이에요. `
+                      : '결과 안내일(오디션 종료일이 더 늦으면 그날)이 결과 기준일이에요. '}
+                    배우가 무기한 기다리지 않도록, 이날까지 결과를 정하지 않은 지원자에게는 다음 날
+                    자동으로 &lsquo;불합격&rsquo;이 안내돼요. {RESULT_WARNING_DAYS}일 전부터
+                    스튜디오와 알림에서 미리 알려 드리고, 기준일을 미루면 자동 안내도 함께 미뤄져요.
+                  </p>
                   <label>
                     출연료·교통·식비 <em>*</em>
                     <input
@@ -1168,6 +1220,23 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
                     : '다음 단계 →'}
                 </button>
               </div>
+              {isEdit && removal && (
+                <ProjectCleanup
+                  title={draft.title}
+                  mode={removalMode}
+                  usage={removal.usage}
+                  archived={removal.archived}
+                  confirming={confirming}
+                  busy={removing}
+                  error={removeError}
+                  onOpen={() => {
+                    setConfirming(true);
+                    setRemoveError('');
+                  }}
+                  onCancel={() => setConfirming(false)}
+                  onConfirm={() => void cleanUp()}
+                />
+              )}
             </div>
           </section>
         </div>
@@ -1179,5 +1248,116 @@ export default function ProjectWizard({ contactName, editId, initial }: Props) {
         </div>
       )}
     </main>
+  );
+}
+
+type CleanupProps = {
+  title: string;
+  mode: 'delete' | 'archive';
+  usage: ProjectUsage;
+  archived: boolean;
+  confirming: boolean;
+  busy: boolean;
+  error: string;
+  onOpen: () => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+};
+
+/**
+ * 프로젝트 정리(수정 화면 맨 아래).
+ * 지원자·제안이 없으면 완전 삭제, 있으면 배우가 보는 기록이 남아 있어 보관(숨김)만 한다.
+ * 실수로 누르지 않게 화면 안에서 한 번 더 확인한다.
+ */
+function ProjectCleanup(props: CleanupProps) {
+  const { usage, mode, archived } = props;
+  const name = props.title.trim();
+  const records = [
+    usage.applications > 0 && `지원자 ${usage.applications}명`,
+    usage.proposals > 0 && `캐스팅 제안 ${usage.proposals}건`,
+  ].filter(Boolean);
+  const action = archived ? '다시 꺼내기' : mode === 'delete' ? '프로젝트 삭제' : '프로젝트 보관';
+  return (
+    <section className="cleanup-box" aria-labelledby="cleanup-title">
+      <h2 id="cleanup-title">프로젝트 정리</h2>
+      <p className="wiz-note">
+        {archived
+          ? '보관한 프로젝트예요. 다시 꺼내면 내 프로젝트 목록과 팀 보드에 다시 보여요.'
+          : mode === 'delete'
+            ? '아직 지원자와 보낸 캐스팅 제안이 없어 완전히 삭제할 수 있어요.'
+            : `${records.join('·')}의 기록이 있어 삭제 대신 보관할 수 있어요.`}
+      </p>
+      {!props.confirming ? (
+        <button
+          type="button"
+          className={`button button-outline${mode === 'delete' && !archived ? ' danger' : ''}`}
+          onClick={props.onOpen}
+        >
+          {action}
+        </button>
+      ) : (
+        <div className="cleanup-confirm" role="alertdialog" aria-labelledby="cleanup-question">
+          <strong id="cleanup-question">
+            {name ? `‘${name}’ 프로젝트를` : '이 프로젝트를'}{' '}
+            {archived ? '다시 꺼낼까요?' : mode === 'delete' ? '삭제할까요?' : '보관할까요?'}
+          </strong>
+          {archived ? (
+            <ul>
+              <li>내 프로젝트 목록과 팀 보드에 다시 보여요.</li>
+              <li>배역 접수는 마감된 상태예요. 다시 받으려면 배역 단계에서 접수를 열어 주세요.</li>
+            </ul>
+          ) : mode === 'delete' ? (
+            <ul>
+              <li>배역 {usage.roles}개와 지원 링크가 모두 사라지고, 되돌릴 수 없어요.</li>
+              {usage.teamMembers > 0 && (
+                <li>초대한 팀원 {usage.teamMembers}명도 이 프로젝트 보드를 더 볼 수 없어요.</li>
+              )}
+              <li>캘린더에 잡아 둔 일정은 지우지 않고 남겨 둬요.</li>
+            </ul>
+          ) : (
+            <ul>
+              <li>
+                {records.join('·')}의 지원서·대화·팀 보드 기록이 있어 완전히 지우지 않고 보관해요.
+              </li>
+              <li>모든 배역의 지원 접수가 마감돼요.</li>
+              <li>
+                내 프로젝트 목록과 팀 보드에서 숨겨져요
+                {usage.teamMembers > 0 ? `(초대한 팀원 ${usage.teamMembers}명에게도)` : ''}.
+              </li>
+              <li>배우가 보는 지원 현황과 대화는 그대로 남아요.</li>
+              <li>스튜디오 홈의 &lsquo;보관한 프로젝트&rsquo;에서 언제든 다시 꺼낼 수 있어요.</li>
+            </ul>
+          )}
+          {props.error && (
+            <p className="form-error" role="alert">
+              {props.error}
+            </p>
+          )}
+          <div className="cleanup-actions">
+            <button
+              type="button"
+              className="button button-outline"
+              onClick={props.onCancel}
+              disabled={props.busy}
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              className={`button ${mode === 'delete' && !archived ? 'button-danger' : 'button-primary'}`}
+              onClick={props.onConfirm}
+              disabled={props.busy}
+            >
+              {props.busy ? '처리 중…' : action}
+            </button>
+          </div>
+        </div>
+      )}
+      {!props.confirming && props.error && (
+        <p className="form-error" role="alert">
+          {props.error}
+        </p>
+      )}
+    </section>
   );
 }

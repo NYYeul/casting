@@ -9,6 +9,8 @@ import { NotifBell } from '@/components/notif-bell';
 import { BrandLogo } from '@/components/brand';
 import PhotoLightbox from '@/components/photo-lightbox';
 import ProducerNav from '@/components/producer-nav';
+import type { Project } from '@/lib/accounts';
+import { dDayLabel, daysUntilResult, isResultDueSoon, kstToday } from '@/lib/result-deadline';
 import { formatDates } from '@/lib/schedule';
 import { useBackClose } from '@/lib/use-back-close';
 
@@ -387,9 +389,14 @@ export default function Studio({
   const [note, setNote] = useState('');
   const [pendingPublicStage, setPendingPublicStage] = useState<PublicStage | null>(null);
   const [photoAt, setPhotoAt] = useState<number | null>(null);
+  // 보관(숨김)한 프로젝트. 홈 맨 아래 '보관한 프로젝트'에서 다시 꺼낼 수 있다.
+  const [archivedProjects, setArchivedProjects] = useState<Project[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
 
   const role = roles.find((item) => item.id === roleId);
   const selected = applications.find((item) => item.id === selectedId);
+  // 결과 자동 안내 기준(한국 날짜). 배역의 결과 기준일과 비교한다.
+  const today = kstToday();
   const chatTarget =
     applications.find((item) => item.id === chatId) || recent.find((item) => item.id === chatId);
 
@@ -440,9 +447,38 @@ export default function Studio({
     }
   }, []);
 
+  const loadArchived = useCallback(async () => {
+    try {
+      const result = await api<{ projects: Project[] }>('/api/projects');
+      setArchivedProjects(result.projects.filter((project) => project.archivedAt));
+    } catch {
+      /* 보관함은 실패해도 핵심 화면을 막지 않는다 */
+    }
+  }, []);
+
+  async function restoreProject(id: string) {
+    setBusy(true);
+    setMessage('');
+    try {
+      await api<{ project: Project }>('/api/projects', {
+        method: 'PATCH',
+        body: JSON.stringify({ id, archived: false }),
+      });
+      await Promise.all([loadRoles(), loadArchived()]);
+      setMessage('프로젝트를 다시 꺼냈습니다. 배역 접수는 마감 상태라 수정 화면에서 열 수 있어요.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '다시 꺼내지 못했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     void loadRoles();
   }, [loadRoles]);
+  useEffect(() => {
+    if (auth === 'ready') void loadArchived();
+  }, [auth, loadArchived]);
   useEffect(() => {
     if (auth === 'ready') {
       void loadApplications(roleId);
@@ -713,6 +749,23 @@ export default function Studio({
                   dates[0] === dates[dates.length - 1]
                     ? formattedDate(dates[0])
                     : `${formattedDate(dates[0])} – ${formattedDate(dates[dates.length - 1])}`;
+                // 결과 기준일이 3일 안으로 다가왔는데 결과 전 지원자가 남은 배역. 가장 이른 기준일을 알린다.
+                const dueSoon = project.roles
+                  .filter(
+                    (item) =>
+                      (item.pendingCount ?? 0) > 0 &&
+                      isResultDueSoon(item.resultDueDate ?? '', today),
+                  )
+                  .sort((a, b) => (a.resultDueDate ?? '').localeCompare(b.resultDueDate ?? ''));
+                const pending = dueSoon.reduce((sum, item) => sum + (item.pendingCount ?? 0), 0);
+                const pendingShortlist = dueSoon.reduce(
+                  (sum, item) => sum + (item.pendingShortlistCount ?? 0),
+                  0,
+                );
+                const firstDue = dueSoon[0];
+                const dueDays = firstDue
+                  ? daysUntilResult(firstDue.resultDueDate ?? '', today)
+                  : null;
                 return (
                   <section className="pcard" key={project.title}>
                     <div className="pcard-top">
@@ -749,6 +802,27 @@ export default function Studio({
                         <strong>{project.shortlistCount}</strong>
                       </div>
                     </div>
+                    {firstDue && dueDays !== null && (
+                      <button
+                        type="button"
+                        className="result-warn"
+                        onClick={() => {
+                          setFilter('all');
+                          setSelectedId(null);
+                          goTab('applicants', firstDue.id);
+                        }}
+                      >
+                        <strong>
+                          결과 안내 {dDayLabel(dueDays)} ·{' '}
+                          {formattedDate(firstDue.resultDueDate ?? '')}
+                        </strong>
+                        <span>
+                          결과 전 지원자 {pending}명
+                          {pendingShortlist > 0 ? `(오디션 후보 ${pendingShortlist}명 포함)` : ''}은
+                          기준일 다음 날 자동으로 &lsquo;불합격&rsquo; 안내돼요. 결과 정하기 ›
+                        </span>
+                      </button>
+                    )}
                     <button
                       className="button button-primary full"
                       onClick={() => {
@@ -770,6 +844,40 @@ export default function Studio({
                   </section>
                 );
               })
+            )}
+            {archivedProjects.length > 0 && (
+              <div className="archived-box">
+                <button
+                  type="button"
+                  className="share-row"
+                  aria-expanded={showArchived}
+                  onClick={() => setShowArchived((value) => !value)}
+                >
+                  보관한 프로젝트 {archivedProjects.length}개 {showArchived ? '▴' : '▾'}
+                </button>
+                {showArchived &&
+                  archivedProjects.map((project) => (
+                    <div key={project.id} className="archived-row">
+                      <span>
+                        <strong>{project.title}</strong>
+                        <small>
+                          {new Date(project.archivedAt!).toLocaleDateString('ko-KR', {
+                            timeZone: 'Asia/Seoul',
+                          })}{' '}
+                          보관 · 배우의 지원 현황은 그대로 보여요
+                        </small>
+                      </span>
+                      <button
+                        type="button"
+                        className="button button-outline"
+                        disabled={busy}
+                        onClick={() => void restoreProject(project.id)}
+                      >
+                        다시 꺼내기
+                      </button>
+                    </div>
+                  ))}
+              </div>
             )}
             {/* 배역 추가·수정은 각 프로젝트의 '프로젝트 수정'에서 한다. */}
             <div className="split-actions">
@@ -1365,6 +1473,20 @@ export default function Studio({
                 <option value="not_selected">불합격</option>
                 <option value="cast">합격</option>
               </select>
+              {selected.resultAutoAt && selected.publicStage === 'not_selected' ? (
+                <p className="auto-result-note">
+                  <b>자동 안내</b> 결과 기준일이 지나 자동으로 불합격이 안내됐어요. 결과를 바꾸면
+                  배우의 지원 현황에 바로 반영돼요.
+                </p>
+              ) : (
+                selected.publicStage === 'received' &&
+                role?.resultDueDate && (
+                  <p className="auto-result-note">
+                    결과 기준일 {formattedDate(role.resultDueDate)}이 지나도록 결과를 정하지 않으면
+                    다음 날 자동으로 불합격이 안내돼요.
+                  </p>
+                )
+              )}
               {pendingPublicStage && pendingPublicStage !== selected.publicStage && (
                 <div className="public-confirm">
                   <p>

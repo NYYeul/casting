@@ -156,3 +156,23 @@ export function pickKnown(values: unknown, allowed: readonly string[]): string[]
   if (!Array.isArray(values)) return [];
   return [...new Set(values.filter((value): value is string => allowed.includes(value)))];
 }
+
+/**
+ * 프로젝트를 정리하는 방법.
+ * 지원서나 캐스팅 제안이 하나라도 있으면 배우가 보는 기록이라 지우지 않고 보관(숨김)만 한다.
+ * 아무도 지원하지 않았고 제안도 보내지 않은 프로젝트만 완전히 지울 수 있다.
+ */
+export function projectRemovalMode(usage: {
+  applications: number;
+  proposals: number;
+}): 'delete' | 'archive' {
+  return usage.applications > 0 || usage.proposals > 0 ? 'archive' : 'delete';
+}
+
+/** 배우 배역 검색에서 고를 수 있는 값(role-search.ts의 parseRoleFilters에 넘긴다) */
+export const ROLE_FILTER_OPTIONS = {
+  formats: FORMATS,
+  genres: GENRE_TAGS,
+  regions: PROJECT_REGIONS,
+  roleTypes: Object.keys(ROLE_TYPES),
+};

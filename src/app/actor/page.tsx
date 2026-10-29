@@ -1,23 +1,26 @@
 import Link from 'next/link';
 import { BrandLogo } from '@/components/brand';
 import { redirect } from 'next/navigation';
-import { formatDates } from '@/lib/schedule';
+import RoleCard from '@/components/role-card';
+import RoleSearchForm from '@/components/role-search-form';
 import { getActorId } from '@/lib/auth';
-import { listOpenRoles } from '@/lib/db';
+import { searchOpenRoles } from '@/lib/db';
+import { ROLE_FILTER_OPTIONS } from '@/lib/project-meta';
+import { hasRoleFilters, parseRoleFilters } from '@/lib/role-search';
 import MyApplications from './my-applications';
 
 export const dynamic = 'force-dynamic';
 
-function shortDate(date: string) {
-  return new Date(`${date}T00:00:00`).toLocaleDateString('ko-KR', {
-    month: 'long',
-    day: 'numeric',
-  });
-}
-
-export default async function ActorHome() {
+export default async function ActorHome({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   if (await getActorId()) redirect('/me');
-  const roles = await listOpenRoles(new Date().toISOString().slice(0, 10));
+  const filters = parseRoleFilters(await searchParams, ROLE_FILTER_OPTIONS);
+  const searching = hasRoleFilters(filters);
+  // 로그인 전이라 출연 불가일을 모른다('출연 불가일 피하기'는 숨긴다).
+  const { all, roles } = await searchOpenRoles(new Date().toISOString().slice(0, 10), filters);
   return (
     <main className="app-shell narrow">
       <header className="home-header">
@@ -32,36 +35,27 @@ export default async function ActorHome() {
         <p className="greet-sub">안녕하세요, 배우님.</p>
         <h1 className="page-title">오늘의 오디션</h1>
         <MyApplications />
-        <div className="section-head">
+        <div className="section-head" id="roles">
           <h2>모집 중인 배역</h2>
           <span className="muted" style={{ fontSize: 12 }}>
-            {roles.length}개
+            {searching ? `${roles.length}개 / 전체 ${all.length}개` : `${all.length}개`}
           </span>
         </div>
+        <RoleSearchForm initial={filters} unavailableCount={null} />
         {roles.length === 0 ? (
-          <div className="empty-card">지금 모집 중인 배역이 없습니다.</div>
+          <div className="empty-card">
+            {searching ? (
+              <>
+                조건에 맞는 배역이 없어요.
+                <br />
+                <Link href="/actor#roles">필터 초기화</Link>
+              </>
+            ) : (
+              '지금 모집 중인 배역이 없습니다.'
+            )}
+          </div>
         ) : (
-          roles.map((role) => (
-            <Link key={role.id} href={`/apply/${role.slug}`} className="pcard role-link">
-              <div className="pcard-top">
-                <div className="pcard-img" style={{ width: 96, height: 104 }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`https://picsum.photos/seed/${role.slug}/200/220`} alt="" />
-                </div>
-                <div className="pcard-info">
-                  <span className="badge-soft">{shortDate(role.deadline)} 마감</span>
-                  <h3>{role.projectTitle}</h3>
-                  <p className="sub">{role.title}</p>
-                  <p className="meta">
-                    촬영 {formatDates(role.shootDates, 1) || shortDate(role.shootDate)} ·{' '}
-                    {role.location}
-                    <br />
-                    {role.pay}
-                  </p>
-                </div>
-              </div>
-            </Link>
-          ))
+          roles.map((role) => <RoleCard key={role.id} role={role} />)
         )}
       </div>
     </main>

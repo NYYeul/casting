@@ -7,9 +7,14 @@ import RecentStrip from '@/components/recent-strip';
 import { RECENT_ROLES } from '@/lib/recent';
 import { getProfile, listActorProposals } from '@/lib/accounts';
 import { getCurrentUser } from '@/lib/auth';
-import { listActorApplications, listOpenRoles } from '@/lib/db';
+import RoleCard from '@/components/role-card';
+import RoleSearchForm from '@/components/role-search-form';
+import { closeOverdueResults, listActorApplications, searchOpenRoles } from '@/lib/db';
 import { matchRoleForActor } from '@/lib/match';
 import { profileCompletion } from '@/lib/profile';
+import { ROLE_FILTER_OPTIONS } from '@/lib/project-meta';
+import { kstToday } from '@/lib/result-deadline';
+import { hasRoleFilters, parseRoleFilters } from '@/lib/role-search';
 import { actorStageInfo, actorStageOf } from '@/lib/types';
 import ProposalActions from './proposal-actions';
 
@@ -22,18 +27,30 @@ function shortDate(date: string) {
   });
 }
 
-export default async function ActorHome() {
+export default async function ActorHome({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect('/login?next=/me');
   if (user.role !== 'actor') redirect('/studio');
   const profile = await getProfile(user.id);
   const completion = profile ? profileCompletion(profile) : 0;
   const proposals = await listActorProposals(user.id);
+  // 결과 기준일이 지나도록 결과가 없는 내 지원서는 여기서 자동으로 결과를 안내한다.
+  await closeOverdueResults({ actorId: user.id }, kstToday());
   const applications = await listActorApplications(user.id);
   const appliedRoleIds = new Set(applications.map((item) => item.roleId));
-  const roles = await listOpenRoles(new Date().toISOString().slice(0, 10));
+  const filters = parseRoleFilters(await searchParams, ROLE_FILTER_OPTIONS);
+  const searching = hasRoleFilters(filters);
+  const { all, roles } = await searchOpenRoles(
+    new Date().toISOString().slice(0, 10),
+    filters,
+    profile?.unavailableDates ?? [],
+  );
   const matched = profile
-    ? roles
+    ? all
         .map((role) => ({ role, fit: matchRoleForActor(profile, role) }))
         .filter((entry) => entry.fit.score >= 25 && !appliedRoleIds.has(entry.role.id))
         .sort((a, b) => b.fit.score - a.fit.score)
@@ -172,37 +189,35 @@ export default async function ActorHome() {
           </>
         )}
 
-        <div className="section-head">
+        <div className="section-head" id="roles">
           <h2>모집 중인 배역</h2>
           <span className="muted" style={{ fontSize: 12 }}>
-            {roles.length}개
+            {searching ? `${roles.length}개 / 전체 ${all.length}개` : `${all.length}개`}
           </span>
         </div>
-        <div className="role-grid">
-          {roles.map((role) => (
-            <Link key={role.id} href={`/apply/${role.slug}`} className="pcard role-link">
-              <div className="pcard-top">
-                <div className="pcard-img" style={{ width: 96, height: 104 }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`https://picsum.photos/seed/${role.slug}/200/220`} alt="" />
-                </div>
-                <div className="pcard-info">
-                  <span className="badge-soft">
-                    {appliedRoleIds.has(role.id) ? '지원함' : `${shortDate(role.deadline)} 마감`}
-                  </span>
-                  <h3>{role.projectTitle}</h3>
-                  <p className="sub">{role.title}</p>
-                  <p className="meta">
-                    촬영 {formatDates(role.shootDates, 1) || shortDate(role.shootDate)} ·{' '}
-                    {role.location}
-                    <br />
-                    {role.pay}
-                  </p>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+        <RoleSearchForm
+          initial={filters}
+          unavailableCount={profile?.unavailableDates.length ?? 0}
+        />
+        {roles.length === 0 ? (
+          <div className="empty-card">
+            {searching ? (
+              <>
+                조건에 맞는 배역이 없어요.
+                <br />
+                <Link href="/me#roles">필터 초기화</Link>
+              </>
+            ) : (
+              '지금 모집 중인 배역이 없습니다.'
+            )}
+          </div>
+        ) : (
+          <div className="role-grid">
+            {roles.map((role) => (
+              <RoleCard key={role.id} role={role} applied={appliedRoleIds.has(role.id)} />
+            ))}
+          </div>
+        )}
       </div>
     </main>
   );
