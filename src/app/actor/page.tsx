@@ -3,6 +3,7 @@ import { BrandLogo } from '@/components/brand';
 import { redirect } from 'next/navigation';
 import RoleCard from '@/components/role-card';
 import RoleSearchForm from '@/components/role-search-form';
+import { getProducerOrgLines } from '@/lib/accounts';
 import { getActorId } from '@/lib/auth';
 import { searchOpenRoles } from '@/lib/db';
 import { ROLE_FILTER_OPTIONS } from '@/lib/project-meta';
@@ -21,6 +22,7 @@ export default async function ActorHome({
   const searching = hasRoleFilters(filters);
   // 로그인 전이라 출연 불가일을 모른다('출연 불가일 피하기'는 숨긴다).
   const { all, roles } = await searchOpenRoles(new Date().toISOString().slice(0, 10), filters);
+  const orgLines = await getProducerOrgLines(roles.map((role) => role.ownerId));
   return (
     <main className="app-shell narrow">
       <header className="home-header">
@@ -55,7 +57,13 @@ export default async function ActorHome({
             )}
           </div>
         ) : (
-          roles.map((role) => <RoleCard key={role.id} role={role} />)
+          roles.map((role) => (
+            <RoleCard
+              key={role.id}
+              role={role}
+              orgLine={role.ownerId ? orgLines.get(role.ownerId) : undefined}
+            />
+          ))
         )}
       </div>
     </main>

@@ -14,9 +14,12 @@ function shortDate(date: string) {
 export default function RoleCard({
   role,
   applied = false,
+  orgLine,
 }: {
   role: OpenRoleListing;
   applied?: boolean;
+  /** 제작자 소속 표기(예: "○○대학교 영화과 · 연출") */
+  orgLine?: string;
 }) {
   const tags = [
     role.projectFormat,
@@ -37,6 +40,7 @@ export default function RoleCard({
           </span>
           <h3>{role.projectTitle}</h3>
           <p className="sub">{role.title}</p>
+          {orgLine && <p className="org-line">{orgLine}</p>}
           {tags.length > 0 && <p className="role-tags">{tags.join(' · ')}</p>}
           <p className="meta">
             촬영 {formatDates(role.shootDates, 1) || shortDate(role.shootDate)} · {role.location}

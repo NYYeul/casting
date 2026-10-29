@@ -23,7 +23,16 @@ export type CompareState = {
   candidates: string[];
   /** rounds[0] = 첫 라운드 … 마지막 = 결승(경기 1개) */
   rounds: BracketPair[][];
+  /**
+   * '보류'로 뒤로 미룬 경기 키("라운드:경기") — 먼저 미룬 순서대로.
+   * 예전에 저장된 결과에는 없으므로 선택 항목이다.
+   */
+  deferred?: string[];
 };
+
+function matchKey(roundIndex: number, pairIndex: number) {
+  return `${roundIndex}:${pairIndex}`;
+}
 
 /** 부전승 자동 진출을 포함해 만들어진 대진의 첫 라운드 경기 수로 라운드 이름을 구한다. */
 export function roundLabel(pairCount: number) {
@@ -148,18 +157,57 @@ export function isCompareState(value: unknown): value is CompareState {
   );
 }
 
-/** 아직 승자를 고르지 않은 다음 경기를 찾는다. 모두 끝났으면 null. */
-export function currentMatch(state: CompareState) {
+/** 지금 라운드에서 아직 승자를 고르지 않은 경기들 (경기 순서대로). */
+function pendingMatches(state: CompareState) {
   for (let roundIndex = 0; roundIndex < state.rounds.length; roundIndex += 1) {
     const round = state.rounds[roundIndex];
-    for (let pairIndex = 0; pairIndex < round.length; pairIndex += 1) {
-      const pair = round[pairIndex];
-      if (pair.a !== null && pair.b !== null && pair.winner === null) {
-        return { roundIndex, pairIndex, pair };
-      }
-    }
+    const pending = round
+      .map((pair, pairIndex) => ({ roundIndex, pairIndex, pair }))
+      .filter(({ pair }) => pair.a !== null && pair.b !== null && pair.winner === null);
+    if (pending.length) return pending;
   }
-  return null;
+  return [];
+}
+
+/**
+ * 아직 승자를 고르지 않은 다음 경기를 찾는다. 모두 끝났으면 null.
+ * '보류'한 경기는 같은 라운드의 다른 경기를 모두 고른 뒤, 미룬 순서대로 다시 나온다.
+ */
+export function currentMatch(state: CompareState) {
+  const pending = pendingMatches(state);
+  if (!pending.length) return null;
+  const deferred = state.deferred ?? [];
+  const fresh = pending.find(
+    (item) => !deferred.includes(matchKey(item.roundIndex, item.pairIndex)),
+  );
+  if (fresh) return fresh;
+  return [...pending].sort(
+    (x, y) =>
+      deferred.indexOf(matchKey(x.roundIndex, x.pairIndex)) -
+      deferred.indexOf(matchKey(y.roundIndex, y.pairIndex)),
+  )[0];
+}
+
+/** 보류할 수 있는지 — 같은 라운드에 남은 다른 경기가 있어야 뒤로 미룰 수 있다. */
+export function canDefer(state: CompareState) {
+  return pendingMatches(state).length > 1;
+}
+
+/**
+ * 결정하기 어려운 경기를 '보류'해 이 라운드의 맨 뒤로 미룬다 (원본 불변).
+ * 다시 보류하면 또 맨 뒤로 간다. 라운드에 이 경기만 남았으면 그대로 둔다.
+ */
+export function deferMatch(
+  state: CompareState,
+  roundIndex: number,
+  pairIndex: number,
+): CompareState {
+  const pair = state.rounds[roundIndex]?.[pairIndex];
+  if (!pair) throw new Error('경기를 찾을 수 없습니다.');
+  if (pair.a === null || pair.b === null) throw new Error('아직 진행할 수 없는 경기입니다.');
+  if (pair.winner !== null) throw new Error('이미 승자가 정해진 경기입니다.');
+  const key = matchKey(roundIndex, pairIndex);
+  return { ...state, deferred: [...(state.deferred ?? []).filter((item) => item !== key), key] };
 }
 
 /**
@@ -181,7 +229,9 @@ export function applyPick(
   const rounds = cloneRounds(state.rounds);
   rounds[roundIndex][pairIndex].winner = winnerId;
   advance(rounds, roundIndex, pairIndex, winnerId);
-  return { ...state, rounds };
+  const key = matchKey(roundIndex, pairIndex);
+  const deferred = (state.deferred ?? []).filter((item) => item !== key);
+  return { ...state, rounds, ...(state.deferred ? { deferred } : {}) };
 }
 
 /** 우승자 id. 아직 결승이 끝나지 않았으면 null. */

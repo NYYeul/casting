@@ -5,9 +5,11 @@ import BackButton from '@/components/back-button';
 import ProducerNav from '@/components/producer-nav';
 import {
   applyPick,
+  canDefer,
   champion,
   createState,
   currentMatch,
+  deferMatch,
   progress,
   roundName,
   roundProgress,
@@ -194,6 +196,12 @@ export default function CompareClient() {
       setPicked(null);
       if (champion(next)) setStage('done');
     }, PICK_DELAY_MS);
+  }
+
+  // 결정하기 어려운 대결은 이 라운드의 맨 뒤로 미룬다.
+  function defer() {
+    if (!state || !match || picked) return;
+    setState(deferMatch(state, match.roundIndex, match.pairIndex));
   }
 
   useEffect(
@@ -452,6 +460,15 @@ export default function CompareClient() {
               </span>
             </div>
             <p className={styles.hint}>더 어울리는 후보를 탭해 주세요.</p>
+            {canDefer(state) && (
+              <button
+                className={`button button-soft ${styles.deferButton}`}
+                onClick={defer}
+                disabled={Boolean(picked)}
+              >
+                보류 — 이 대결은 나중에 다시 보기
+              </button>
+            )}
           </section>
         )}
 

@@ -5,7 +5,7 @@ import ActorNav from '@/components/actor-nav';
 import { NotifBell } from '@/components/notif-bell';
 import RecentStrip from '@/components/recent-strip';
 import { RECENT_ROLES } from '@/lib/recent';
-import { getProfile, listActorProposals } from '@/lib/accounts';
+import { getProducerOrgLines, getProfile, listActorProposals } from '@/lib/accounts';
 import { getCurrentUser } from '@/lib/auth';
 import RoleCard from '@/components/role-card';
 import RoleSearchForm from '@/components/role-search-form';
@@ -49,6 +49,7 @@ export default async function ActorHome({
     filters,
     profile?.unavailableDates ?? [],
   );
+  const orgLines = await getProducerOrgLines(all.map((role) => role.ownerId));
   const matched = profile
     ? all
         .map((role) => ({ role, fit: matchRoleForActor(profile, role) }))
@@ -134,7 +135,14 @@ export default async function ActorHome({
           </span>
         </div>
         {applications.length === 0 ? (
-          <div className="empty-card">아직 지원한 배역이 없습니다.</div>
+          <div className="empty-card">
+            아직 지원한 배역이 없습니다.
+            <br />
+            아래 공고에서 첫 지원을 시작해 보세요.
+            <a href="#open-roles" className="button button-soft empty-cta">
+              모집 중인 배역 보기
+            </a>
+          </div>
         ) : (
           applications.map((item) => (
             <Link key={item.id} href={`/status/${item.receiptToken}`} className="audition-card">
@@ -157,7 +165,7 @@ export default async function ActorHome({
         {matched.length > 0 && (
           <>
             <div className="section-head">
-              <h2>나와 잘 맞는 공고</h2>
+              <h2>{user.name}배우님을 위한 맞춤 공고</h2>
               <span className="muted" style={{ fontSize: 12 }}>
                 프로필 기반 추천
               </span>
@@ -169,9 +177,11 @@ export default async function ActorHome({
                   href={`/apply/${role.slug}`}
                   className="pcard role-link match-card"
                 >
-                  <span className="match-badge">{fit.score}% 매치</span>
                   <h3>{role.projectTitle}</h3>
                   <p className="sub">{role.title}</p>
+                  {role.ownerId && orgLines.get(role.ownerId) && (
+                    <p className="org-line">{orgLines.get(role.ownerId)}</p>
+                  )}
                   <p className="meta">
                     촬영 {formatDates(role.shootDates, 1) || shortDate(role.shootDate)} ·{' '}
                     {role.location}
@@ -189,7 +199,7 @@ export default async function ActorHome({
           </>
         )}
 
-        <div className="section-head" id="roles">
+        <div className="section-head" id="open-roles">
           <h2>모집 중인 배역</h2>
           <span className="muted" style={{ fontSize: 12 }}>
             {searching ? `${roles.length}개 / 전체 ${all.length}개` : `${all.length}개`}
@@ -205,7 +215,7 @@ export default async function ActorHome({
               <>
                 조건에 맞는 배역이 없어요.
                 <br />
-                <Link href="/me#roles">필터 초기화</Link>
+                <Link href="/me#open-roles">필터 초기화</Link>
               </>
             ) : (
               '지금 모집 중인 배역이 없습니다.'
@@ -214,7 +224,12 @@ export default async function ActorHome({
         ) : (
           <div className="role-grid">
             {roles.map((role) => (
-              <RoleCard key={role.id} role={role} applied={appliedRoleIds.has(role.id)} />
+              <RoleCard
+                key={role.id}
+                role={role}
+                applied={appliedRoleIds.has(role.id)}
+                orgLine={role.ownerId ? orgLines.get(role.ownerId) : undefined}
+              />
             ))}
           </div>
         )}

@@ -131,3 +131,49 @@ export function matchRoleForActor(
 
   return { score: Math.max(0, Math.min(MAX_SCORE, Math.round(score))), reasons };
 }
+
+/** 마지막 글자에 받침이 있으면 '이', 없으면 '가'. 한글이 아니면 '이(가)'. */
+function subjectParticle(word: string) {
+  const code = word.charCodeAt(word.length - 1) - 0xac00;
+  if (code < 0 || code > 11171) return '이(가)';
+  return code % 28 ? '이' : '가';
+}
+
+/**
+ * 맞춤 공고 알림 문구. 점수(%) 대신 무엇이 맞는지를 이름과 함께 말한다.
+ * - 성별·연령이 맞으면: "김OO배우님께 맞는 20대 여성 배역 공고가 올라왔어요"
+ * - 그 외 지역·일정 등이 맞으면: "김OO배우님, 서울·촬영 가능일이 맞는 새 공고가 있어요"
+ */
+export function matchNotice(
+  name: string,
+  profile: Pick<MatchProfileInput, 'gender' | 'birthYear' | 'unavailableDates'>,
+  role: Pick<MatchRoleInput, 'location' | 'shootDate' | 'shootDates'>,
+  reasons: string[],
+  currentYear = new Date().getFullYear(),
+) {
+  const who = name ? `${name}배우님` : '배우님';
+  const age = koreanAge(profile.birthYear, currentYear);
+  const decade = reasons.map((reason) => reason.match(/^(\d)0대 조건 부합/)).find(Boolean);
+  const ageText = decade
+    ? `${decade[1]}0대`
+    : reasons.includes('연령 조건 부합') && age !== null
+      ? `${decadeOf(age)}대`
+      : '';
+  const genderText = reasons.includes('성별 조건 부합')
+    ? { female: '여성', male: '남성' }[profile.gender] || ''
+    : '';
+  const person = [ageText, genderText].filter(Boolean).join(' ');
+  if (person) return `${who}께 맞는 ${person} 배역 공고가 올라왔어요`;
+
+  const points: string[] = [];
+  if (reasons.some((reason) => reason.startsWith('지역 일치')))
+    points.push(role.location.split(' ')[0]);
+  const days = role.shootDates?.length ? role.shootDates : role.shootDate ? [role.shootDate] : [];
+  if (days.length && !days.some((day) => profile.unavailableDates.includes(day)))
+    points.push('촬영 가능일');
+  if (reasons.some((reason) => reason.startsWith('이미지 태그'))) points.push('이미지');
+  if (reasons.some((reason) => reason.startsWith('특기'))) points.push('특기');
+  if (!points.length) return `${who}께 맞는 새 공고가 올라왔어요`;
+  const list = points.slice(0, 2).join('·');
+  return `${who}, ${list}${subjectParticle(list)} 맞는 새 공고가 있어요`;
+}
